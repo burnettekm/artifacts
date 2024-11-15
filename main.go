@@ -2,6 +2,7 @@ package main
 
 import (
 	"artifacts/api"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -17,10 +18,26 @@ func main() {
 	url := "https://api.artifactsmmo.com"
 
 	client := api.NewClient(url, token)
-	char, err := client.GetCharacter("Kristi")
+	//char, err := client.GetCharacter("Kristi")
+	//if err != nil {
+	//	panic(err)
+	//}
+	//
+	//charBytes, err := json.MarshalIndent(char, " ", "    ")
+	//if err != nil {
+	//	panic(err)
+	//}
+	//
+	//fmt.Println("Char Resp: ", string(charBytes))
+
+	resp, err := client.Fight("Kristi")
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Println(char)
+	bytes, err := json.MarshalIndent(resp, " ", "    ")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("Fight resp: ", string(bytes))
 }
