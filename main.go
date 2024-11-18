@@ -40,12 +40,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	if err := charSvc.FightLoop(); err != nil {
+	if err := charSvc.ContinuousFightLoop(); err != nil {
 		panic(err)
 	}
-
-	err = charSvc.Rest()
-	if err != nil {
-		panic(err)
-	}
+	//err = charSvc.Rest()
+	//if err != nil {
+	//	panic(err)
+	//}
 }

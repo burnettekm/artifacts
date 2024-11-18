@@ -11,6 +11,7 @@ type Service interface {
 	MoveCharacter(x, y int) (*MoveResponse, error)
 	Fight() (*FightResponse, error)
 	FightLoop() error
+	ContinuousFightLoop() error
 	Rest() error
 
 	WaitForCooldown()
@@ -113,6 +114,15 @@ func (c *CharacterSvc) Fight() (*FightResponse, error) {
 	}
 
 	c.Character = &fightResp.Data.Character
+	fmt.Printf("Result: %s\n", fightResp.Data.Fight.Result)
+	fmt.Printf("XP Gained: %d\n", fightResp.Data.Fight.Xp)
+	fmt.Printf("Character level: %d\n", c.Character.Level)
+	fmt.Printf("XP to level: %d\n", c.Character.MaxXP-c.Character.XP)
+	fmt.Printf("Drops received: %v\n", fightResp.Data.Fight.Drops)
+	fmt.Printf("Gold received: %v\n", fightResp.Data.Fight.Gold)
+	fmt.Printf("Character HP: %d\n", fightResp.Data.Character.Hp)
+	fmt.Printf("Cooldown: %d seconds\n", fightResp.Data.Cooldown.TotalSeconds)
+
 	c.WaitForCooldown()
 
 	return &fightResp, nil
@@ -125,20 +135,9 @@ func (c *CharacterSvc) FightLoop() error {
 		return nil
 	}
 
-	fmt.Println("Fighting!")
-	path := fmt.Sprintf("/my/%s/action/fight", c.Character.Name)
-	respBytes, err := c.Client.Do(http.MethodPost, path, nil, nil)
+	fightResp, err := c.Fight()
 	if err != nil {
-		return fmt.Errorf("executing request: %w", err)
-	}
-
-	fightResp := FightResponse{}
-	if err := json.Unmarshal(respBytes, &fightResp); err != nil {
-		return fmt.Errorf("unmarshalling resp payload: %w", err)
-	}
-
-	if fightResp.Error.Code != 0 {
-		return fmt.Errorf("error response received: status code: %d, error message: %s", fightResp.Error.Code, fightResp.Error.Message)
+		return fmt.Errorf("executing fight request: %w", err)
 	}
 
 	c.Character = &fightResp.Data.Character
@@ -153,6 +152,31 @@ func (c *CharacterSvc) FightLoop() error {
 
 	c.WaitForCooldown()
 	if err := c.FightLoop(); err != nil {
+		return fmt.Errorf("recursive fightloop: %w", err)
+	}
+
+	return nil
+}
+
+func (c *CharacterSvc) ContinuousFightLoop() error {
+	percentHealth := float64(c.Character.Hp) / float64(c.Character.MaxHP) * 100.0
+	if percentHealth < 25 {
+		fmt.Printf("Character HP below 25 percent: %.2f, HP: %d MaxHP: %d\n", percentHealth, c.Character.Hp, c.Character.MaxHP)
+		if err := c.Rest(); err != nil {
+			return fmt.Errorf("executing rest request: %w", err)
+		}
+		if err := c.ContinuousFightLoop(); err != nil {
+			return fmt.Errorf("recursive rest fightloop: %w", err)
+		}
+	}
+
+	fightResp, err := c.Fight()
+	if err != nil {
+		return fmt.Errorf("executing fight request: %w", err)
+	}
+
+	c.Character = &fightResp.Data.Character
+	if err := c.ContinuousFightLoop(); err != nil {
 		return fmt.Errorf("recursive fightloop: %w", err)
 	}
 
