@@ -14,3 +14,8 @@ type Cooldown struct {
 	Expiration       time.Time `json:"expiration"`
 	Reason           string    `json:"reason"`
 }
+
+type Content struct {
+	Type string `json:"type"`
+	Code string `json:"code"`
+}

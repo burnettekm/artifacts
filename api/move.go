@@ -23,8 +23,3 @@ type Destination struct {
 	Y       int     `json:"y"`
 	Content Content `json:"content"`
 }
-
-type Content struct {
-	Type string `json:"type"`
-	Code string `json:"code"`
-}

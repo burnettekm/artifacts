@@ -2,7 +2,6 @@ package main
 
 import (
 	"artifacts/api"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -13,31 +12,40 @@ func main() {
 	if !ok {
 		panic(errors.New("API_TOKEN ENV VAR not found"))
 	}
-	fmt.Println(token)
 
-	url := "https://api.artifactsmmo.com"
-
-	client := api.NewClient(url, token)
-	//char, err := client.GetCharacter("Kristi")
-	//if err != nil {
-	//	panic(err)
-	//}
-	//
-	//charBytes, err := json.MarshalIndent(char, " ", "    ")
-	//if err != nil {
-	//	panic(err)
-	//}
-	//
-	//fmt.Println("Char Resp: ", string(charBytes))
-
-	resp, err := client.Fight("Kristi")
+	client := api.NewClient(token)
+	char, err := client.GetCharacter("Kristi")
 	if err != nil {
 		panic(err)
 	}
 
-	bytes, err := json.MarshalIndent(resp, " ", "    ")
+	charSvc := api.NewCharacterSvc(client, &char.Character)
+
+	// find chicken
+	contentCode := "chicken"
+	contentType := "monster"
+	maps, err := client.GetMaps(&contentCode, &contentType)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("Fight resp: ", string(bytes))
+
+	fmt.Printf("Found %d %s\n", len(maps.Data), contentCode)
+	fmt.Println(maps.Data)
+
+	x := maps.Data[0].X
+	y := maps.Data[0].Y
+
+	// move to the chicken
+	_, err = charSvc.MoveCharacter(x, y)
+	if err != nil {
+		panic(err)
+	}
+	if err := charSvc.FightLoop(); err != nil {
+		panic(err)
+	}
+
+	err = charSvc.Rest()
+	if err != nil {
+		panic(err)
+	}
 }

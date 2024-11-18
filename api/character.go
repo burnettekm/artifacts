@@ -1,130 +1,183 @@
 package api
 
-import "time"
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"time"
+)
+
+type Service interface {
+	MoveCharacter(x, y int) (*MoveResponse, error)
+	Fight() (*FightResponse, error)
+	FightLoop() error
+	Rest() error
+
+	WaitForCooldown()
+}
+
+type CharacterSvc struct {
+	Character *Character
+	Client    *ArtifactsClient
+}
+
+type ListCharactersResponse struct {
+	Characters []Character  `json:"data"`
+	Error      ErrorMessage `json:"error"`
+}
 
 type CharacterResponse struct {
 	Character Character    `json:"data"`
 	Error     ErrorMessage `json:"error"`
 }
 
-type Character struct {
-	Name    string `json:"name"`
-	Account string `json:"account"`
-	Skin    string `json:"skin"`
-
-	Level int `json:"level"`
-	XP    int `json:"xp"`
-	MaxXP int `json:"max_xp"`
-	Gold  int `json:"gold"`
-	Speed int `json:"speed"`
-
-	Hp    int `json:"hp"`
-	MaxHP int `json:"max_hp"`
-	Haste int `json:"haste"`
-
-	X int `json:"x"` // character x coordinate
-	Y int `json:"y"` // character y coordinate
-
-	Cooldown           int       `json:"cooldown"`
-	CooldownExpiration time.Time `json:"cooldown_expiration"` // string<date-time> per docs
-
-	Armor
-	TaskDetails
-	FireStats
-	EarthStats
-	WaterStats
-	Skills
-
-	InventoryMaxItems int             `json:"inventory_max_items"`
-	Inventory         []InventorySlot `json:"inventory"`
+func NewCharacterSvc(client *ArtifactsClient, char *Character) Service {
+	return &CharacterSvc{
+		Character: char,
+		Client:    client,
+	}
 }
 
-type Skills struct {
-	MiningLevel int `json:"mining_level"`
-	MiningXP    int `json:"mining_xp"`
-	MiningMaxXP int `json:"mining_max_xp"`
+func (c *CharacterSvc) WaitForCooldown() {
+	if c.Character.Cooldown == 0 {
+		return
+	}
 
-	WoodcuttingLevel int `json:"woodcutting_level"`
-	WoodcuttingXP    int `json:"woodcutting_xp"`
-	WoodcuttingMaxXP int `json:"woodcutting_max_xp"`
+	fmt.Printf("On cooldown for %d seconds\n", c.Character.Cooldown)
 
-	FishingLevel int `json:"fishing_level"`
-	FishingXP    int `json:"fising_xp"`
-	FishingMaxXP int `json:"fishing_max_xp"`
-
-	WeaponcraftingLevel int `json:"weaponcrafting_level"`
-	WeaponcraftingXP    int `json:"weaponcrafting_xp"`
-	WeaponcraftingMaxXP int `json:"weaponcrafting_max_xp"`
-
-	GearcraftingLevel int `json:"gearcrafting_level"`
-	GearcraftingXP    int `json:"gearcrafting_xp"`
-	GearcraftingMaxXP int `json:"gearcrafting_max_xp"`
-
-	JewelrycraftingLevel int `json:"jewelrycrafting_level"`
-	JewelrycraftingXP    int `json:"jewelrycrafting_xp"`
-	JewelrycraftingMaxXP int `json:"jewelrycrafting_max_xp"`
-
-	CookingLevel int `json:"cooking_level"`
-	CookingXP    int `json:"cooking_xp"`
-	CookingMaxXP int `json:"cooking_max_xp"`
-
-	AlchemyLevel int `json:"alchemy_level"`
-	AlchemyXP    int `json:"alchemy_xp"`
-	AlchemyMaxXP int `json:"alchemy_max_xp"`
+	time.Sleep(time.Duration(c.Character.Cooldown) * time.Second)
+	fmt.Println("cooldown ended...")
+	c.Character.Cooldown = 0
+	return
 }
 
-type FireStats struct {
-	AttackFire int `json:"attack_fire"`
-	DmgFire    int `json:"dmg_fire"`
-	ResFire    int `json:"res_fire"`
+func (c *CharacterSvc) MoveCharacter(x, y int) (*MoveResponse, error) {
+	if c.Character.X == x && c.Character.Y == y {
+		fmt.Printf("character already at %d, %d\n", x, y)
+		return nil, nil
+	}
+
+	fmt.Printf("Moving to %d, %d\n", x, y)
+	path := fmt.Sprintf("/my/%s/action/move", c.Character.Name)
+	reqBody := MoveRequestBody{
+		X: x,
+		Y: y,
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("marshalling body: %w", err)
+	}
+
+	respBytes, err := c.Client.Do(http.MethodPost, path, nil, bodyBytes)
+	if err != nil {
+		return nil, fmt.Errorf("executing request: %w", err)
+	}
+
+	moveResp := MoveResponse{}
+	if err := json.Unmarshal(respBytes, &moveResp); err != nil {
+		return nil, fmt.Errorf("unmarshalling resp payload: %w", err)
+	}
+
+	if moveResp.Error.Code != 0 {
+		return nil, fmt.Errorf("error response received: status code: %d, error message: %s", moveResp.Error.Code, moveResp.Error.Message)
+	}
+
+	c.Character = &moveResp.Data.Character
+	c.WaitForCooldown()
+
+	return &moveResp, nil
 }
 
-type EarthStats struct {
-	AttackEarth int `json:"attack_earth"`
-	DmgEarth    int `json:"dmg_earth"`
-	ResEarth    int `json:"res_earth"`
+func (c *CharacterSvc) Fight() (*FightResponse, error) {
+	percentHealth := float64(c.Character.Hp) / float64(c.Character.MaxHP) * 100.0
+	if percentHealth < 25 {
+		fmt.Printf("Character HP below 25 percent: %.2f\n", percentHealth)
+		return nil, nil
+	}
+
+	fmt.Println("Fighting!")
+	path := fmt.Sprintf("/my/%s/action/fight", c.Character.Name)
+	respBytes, err := c.Client.Do(http.MethodPost, path, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("executing request: %w", err)
+	}
+
+	fightResp := FightResponse{}
+	if err := json.Unmarshal(respBytes, &fightResp); err != nil {
+		return nil, fmt.Errorf("unmarshalling resp payload: %w", err)
+	}
+
+	if fightResp.Error.Code != 0 {
+		return nil, fmt.Errorf("error response received: status code: %d, error message: %s", fightResp.Error.Code, fightResp.Error.Message)
+	}
+
+	c.Character = &fightResp.Data.Character
+	c.WaitForCooldown()
+
+	return &fightResp, nil
 }
 
-type WaterStats struct {
-	AttackWater int `json:"attack_water"`
-	DmgWater    int `json:"dmg_water"`
-	ResWater    int `json:"res_water"`
+func (c *CharacterSvc) FightLoop() error {
+	percentHealth := float64(c.Character.Hp) / float64(c.Character.MaxHP) * 100.0
+	if percentHealth < 25 {
+		fmt.Printf("Character HP below 25 percent: %.2f, HP: %d MaxHP: %d\n", percentHealth, c.Character.Hp, c.Character.MaxHP)
+		return nil
+	}
+
+	fmt.Println("Fighting!")
+	path := fmt.Sprintf("/my/%s/action/fight", c.Character.Name)
+	respBytes, err := c.Client.Do(http.MethodPost, path, nil, nil)
+	if err != nil {
+		return fmt.Errorf("executing request: %w", err)
+	}
+
+	fightResp := FightResponse{}
+	if err := json.Unmarshal(respBytes, &fightResp); err != nil {
+		return fmt.Errorf("unmarshalling resp payload: %w", err)
+	}
+
+	if fightResp.Error.Code != 0 {
+		return fmt.Errorf("error response received: status code: %d, error message: %s", fightResp.Error.Code, fightResp.Error.Message)
+	}
+
+	c.Character = &fightResp.Data.Character
+	fmt.Printf("Result: %s\n", fightResp.Data.Fight.Result)
+	fmt.Printf("XP Gained: %d\n", fightResp.Data.Fight.Xp)
+	fmt.Printf("Character level: %d\n", c.Character.Level)
+	fmt.Printf("XP to level: %d\n", c.Character.MaxXP-c.Character.XP)
+	fmt.Printf("Drops received: %v\n", fightResp.Data.Fight.Drops)
+	fmt.Printf("Gold received: %v\n", fightResp.Data.Fight.Gold)
+	fmt.Printf("Character HP: %d\n", fightResp.Data.Character.Hp)
+	fmt.Printf("Cooldown: %d seconds\n", fightResp.Data.Cooldown.TotalSeconds)
+
+	c.WaitForCooldown()
+	if err := c.FightLoop(); err != nil {
+		return fmt.Errorf("recursive fightloop: %w", err)
+	}
+
+	return nil
 }
 
-type AirStats struct {
-	AttackAir int `json:"attack_air"`
-	DmgAir    int `json:"dmg_air"`
-	ResAir    int `json:"res_air"`
-}
+func (c *CharacterSvc) Rest() error {
+	fmt.Printf("Resting\n")
+	path := fmt.Sprintf("/my/%s/action/rest", c.Character.Name)
+	respBytes, err := c.Client.Do(http.MethodPost, path, nil, nil)
+	if err != nil {
+		return fmt.Errorf("executing request: %w", err)
+	}
 
-type Armor struct {
-	WeaponSlot           string `json:"weapon_slot,omitempty"`
-	ShieldSlot           string `json:"shield_slot,omitempty"`
-	HelmetSlot           string `json:"helmet_slot,omitempty"`
-	BodyArmorSlot        string `json:"body_armor_slot,omitempty"`
-	LegArmorSlot         string `json:"leg_armor_slot,omitempty"`
-	BootsSlot            string `json:"boots_slot,omitempty"`
-	Ring1Slot            string `json:"ring1_slot,omitempty"`
-	Ring2Slot            string `json:"ring2_slot,omitempty"`
-	AmuletSlot           string `json:"amulet_slot,omitempty"`
-	Artifact1Slot        string `json:"artifact1_slot,omitempty"`
-	Artifact2Slot        string `json:"artifact2_slot,omitempty"`
-	Artifact3Slot        string `json:"artifact3_slot,omitempty"`
-	Utility1Slot         string `json:"utility1_slot,omitempty"`
-	Utility1SlotQuantity int    `json:"utility1_slot_quantity,omitempty"`
-	Utility2Slot         string `json:"utility2_slot,omitempty"`
-	Utility2SlotQuantity int    `json:"utility2_slot_quantity,omitempty"`
-}
+	restResp := RestResponse{}
+	if err := json.Unmarshal(respBytes, &restResp); err != nil {
+		return fmt.Errorf("unmarshalling resp payload: %w", err)
+	}
 
-type TaskDetails struct {
-	Task         string `json:"task"`
-	TaskType     string `json:"task_type"`
-	TaskProgress int    `json:"task_progress"`
-	TaskTotal    int    `json:"task_total"`
-}
+	if restResp.Error.Code != 0 {
+		return fmt.Errorf("error response received: status code: %d, error message: %s", restResp.Error.Code, restResp.Error.Message)
+	}
 
-type InventorySlot struct {
-	Slot     int    `json:"slot,omitempty"`
-	Code     string `json:"code,omitempty"`
-	Quantity int    `json:"quantity,omitempty"`
+	c.Character = &restResp.Rest.Character
+	c.WaitForCooldown()
+
+	return nil
 }
