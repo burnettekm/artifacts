@@ -19,3 +19,8 @@ type Content struct {
 	Type string `json:"type"`
 	Code string `json:"code"`
 }
+
+type Item struct {
+	Code     string `json:"code"`
+	Quantity int    `json:"quantity"`
+}

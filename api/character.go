@@ -14,6 +14,9 @@ type Service interface {
 	ContinuousFightLoop() error
 	Rest() error
 
+	AcceptTask() (*AcceptTaskResponse, error)
+	CompleteTask() (*CompleteTaskResponse, error)
+
 	WaitForCooldown()
 }
 
@@ -204,4 +207,55 @@ func (c *CharacterSvc) Rest() error {
 	c.WaitForCooldown()
 
 	return nil
+}
+
+func (c *CharacterSvc) AcceptTask() (*AcceptTaskResponse, error) {
+	fmt.Printf("Accepting task\n")
+	path := fmt.Sprintf("/my/%s/action/task/new", c.Character.Name)
+	respBytes, err := c.Client.Do(http.MethodPost, path, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("executing request: %w", err)
+	}
+
+	acceptTaskResp := AcceptTaskResponse{}
+	if err := json.Unmarshal(respBytes, &acceptTaskResp); err != nil {
+		return nil, fmt.Errorf("unmarshalling resp payload: %w", err)
+	}
+
+	if acceptTaskResp.Error.Code != 0 {
+		return nil, fmt.Errorf("error response received: status code: %d, error message: %s", acceptTaskResp.Error.Code, acceptTaskResp.Error.Message)
+	}
+
+	c.Character = &acceptTaskResp.Data.Character
+	fmt.Printf("Task code: %s\n", acceptTaskResp.Data.Task.Code)
+	fmt.Printf("Task type: %s\n", acceptTaskResp.Data.Task.Type)
+	fmt.Printf("Task total: %d\n", acceptTaskResp.Data.Task.Total)
+	fmt.Printf("Task rewards: %s\n", acceptTaskResp.Data.Task.Rewards)
+	c.WaitForCooldown()
+
+	return &acceptTaskResp, nil
+}
+
+func (c *CharacterSvc) CompleteTask() (*CompleteTaskResponse, error) {
+	fmt.Printf("Accepting task\n")
+	path := fmt.Sprintf("/my/%s/action/task/complete", c.Character.Name)
+	respBytes, err := c.Client.Do(http.MethodPost, path, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("executing request: %w", err)
+	}
+
+	completeTaskResponse := CompleteTaskResponse{}
+	if err := json.Unmarshal(respBytes, &completeTaskResponse); err != nil {
+		return nil, fmt.Errorf("unmarshalling resp payload: %w", err)
+	}
+
+	if completeTaskResponse.Error.Code != 0 {
+		return nil, fmt.Errorf("error response received: status code: %d, error message: %s", completeTaskResponse.Error.Code, completeTaskResponse.Error.Message)
+	}
+
+	c.Character = &completeTaskResponse.Data.Character
+	fmt.Printf("Task rewards: %v\n", completeTaskResponse.Data.Rewards)
+	c.WaitForCooldown()
+
+	return &completeTaskResponse, nil
 }

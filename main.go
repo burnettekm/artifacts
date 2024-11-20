@@ -22,27 +22,40 @@ func main() {
 	charSvc := api.NewCharacterSvc(client, &char.Character)
 
 	// find chicken
-	contentCode := "chicken"
-	contentType := "monster"
-	maps, err := client.GetMaps(&contentCode, &contentType)
+	//contentCode := "chicken"
+	//contentType := "monster"
+
+	// find task master
+	//contentCode := "chicken"
+	contentType := "tasks_master"
+	maps, err := client.GetMaps(nil, &contentType)
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Printf("Found %d %s\n", len(maps.Data), contentCode)
+	fmt.Printf("Found %d %s\n", len(maps.Data), contentType)
 	fmt.Println(maps.Data)
 
 	x := maps.Data[0].X
 	y := maps.Data[0].Y
 
-	// move to the chicken
+	// move
 	_, err = charSvc.MoveCharacter(x, y)
 	if err != nil {
 		panic(err)
 	}
-	if err := charSvc.ContinuousFightLoop(); err != nil {
+
+	//if _, err := charSvc.AcceptTask(); err != nil {
+	//	panic(err)
+	//}
+
+	if _, err := charSvc.CompleteTask(); err != nil {
 		panic(err)
 	}
+
+	//if err := charSvc.ContinuousFightLoop(); err != nil {
+	//	panic(err)
+	//}
 	//err = charSvc.Rest()
 	//if err != nil {
 	//	panic(err)
