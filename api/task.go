@@ -30,6 +30,6 @@ type Task struct {
 }
 
 type TaskRewards struct {
-	Gold  int    `json:"gold"`
-	Items []Item `json:"items"`
+	Gold  int          `json:"gold"`
+	Items []SimpleItem `json:"items"`
 }

@@ -52,6 +52,10 @@ func (c *ArtifactsClient) Do(method, path string, params map[string]string, body
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode > 200 {
+		return nil, fmt.Errorf("got error response: %d", resp.StatusCode)
+	}
+
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("reading body: %w", err)

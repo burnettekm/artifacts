@@ -20,7 +20,12 @@ type Content struct {
 	Code string `json:"code"`
 }
 
-type Item struct {
+type SimpleItem struct {
 	Code     string `json:"code"`
 	Quantity int    `json:"quantity"`
+}
+
+type SkillDetails struct {
+	Xp    int          `json:"xp"`
+	Items []SimpleItem `json:"items"`
 }

@@ -12,14 +12,14 @@ type FightData struct {
 }
 
 type Fight struct {
-	Xp                 int         `json:"xp"`
-	Gold               int         `json:"gold"`
-	Drops              []Item      `json:"drops"`
-	Turns              int         `json:"turns"`
-	MonsterBlockedHits BlockedHits `json:"monster_blocked_hits"`
-	PlayerBlockedHits  BlockedHits `json:"player_blocked_hits"`
-	Logs               []string    `json:"logs"`
-	Result             string      `json:"result"`
+	Xp                 int          `json:"xp"`
+	Gold               int          `json:"gold"`
+	Drops              []SimpleItem `json:"drops"`
+	Turns              int          `json:"turns"`
+	MonsterBlockedHits BlockedHits  `json:"monster_blocked_hits"`
+	PlayerBlockedHits  BlockedHits  `json:"player_blocked_hits"`
+	Logs               []string     `json:"logs"`
+	Result             string       `json:"result"`
 }
 
 type BlockedHits struct {
