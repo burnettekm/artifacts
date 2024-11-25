@@ -50,3 +50,23 @@ func (c *ArtifactsClient) GetItem(code string) (*CraftableItem, error) {
 
 	return &itemResp.Item, nil
 }
+
+func (c *ArtifactsClient) CraftItem(characterName, code string, quantity int) (*SkillData, error) {
+	path := fmt.Sprintf("/my/%s/action/crafting", characterName)
+	bodyStruct := SimpleItem{
+		Code:     code,
+		Quantity: quantity,
+	}
+	bodyBytes, err := json.Marshal(bodyStruct)
+	resp, err := c.Do(http.MethodPost, path, nil, bodyBytes)
+	if err != nil {
+		return nil, fmt.Errorf("executing crafting request: %w", err)
+	}
+
+	craftingResp := SkillResponse{}
+	if err := json.Unmarshal(resp, &craftingResp); err != nil {
+		return nil, fmt.Errorf("unmarshalling payload: %w", err)
+	}
+
+	return &craftingResp.Data, nil
+}

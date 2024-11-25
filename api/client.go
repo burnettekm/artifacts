@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,19 @@ import (
 
 type Client interface {
 	Do(method, path string, params map[string]string, body []byte) ([]byte, error)
+
+	MoveCharacter(name string) (*MoveResponse, error)
+
+	Unequip(characterName string, item CraftableItem) (*UnequipData, error)
+	Equip(characterName string, item CraftableItem) (*EquipData, error)
+
+	GetItem(code string) (*CraftableItem, error)
+	CraftItem(characterName, code string, quantity int) (*SkillData, error)
+
+	GetResource(code string) ([]ResourceData, error)
+	Gather(characterName string) (*SkillData, error)
+
+	GetMaps(contentCode, contentType *string) (*MapResponse, error)
 }
 
 type ArtifactsClient struct {
@@ -24,6 +38,37 @@ func NewClient(authToken string) *ArtifactsClient {
 		AuthToken:  authToken,
 		httpClient: http.DefaultClient,
 	}
+}
+
+// todo: move to character file?
+func (c *ArtifactsClient) MoveCharacter(name string, x, y int) (*MoveResponse, error) {
+	fmt.Printf("Moving to %d, %d\n", x, y)
+	path := fmt.Sprintf("/my/%s/action/move", name)
+	reqBody := MoveRequestBody{
+		X: x,
+		Y: y,
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("marshalling body: %w", err)
+	}
+
+	respBytes, err := c.Do(http.MethodPost, path, nil, bodyBytes)
+	if err != nil {
+		return nil, fmt.Errorf("executing move request: %w", err)
+	}
+
+	moveResp := MoveResponse{}
+	if err := json.Unmarshal(respBytes, &moveResp); err != nil {
+		return nil, fmt.Errorf("unmarshalling resp payload: %w", err)
+	}
+
+	if moveResp.Error.Code != 0 {
+		return nil, fmt.Errorf("error response received: status code: %d, error message: %s", moveResp.Error.Code, moveResp.Error.Message)
+	}
+
+	return &moveResp, nil
 }
 
 func (c *ArtifactsClient) Do(method, path string, params map[string]string, body []byte) ([]byte, error) {

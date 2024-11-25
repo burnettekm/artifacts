@@ -27,7 +27,7 @@ type Character struct {
 	Cooldown           int       `json:"cooldown"`
 	CooldownExpiration time.Time `json:"cooldown_expiration"` // string<date-time> per docs
 
-	WeaponSlot           string `json:"weapon_slot,omitempty"`
+	WeaponSlot           string `json:"weapon_slot,omitempty" type:"weapon"`
 	ShieldSlot           string `json:"shield_slot,omitempty"`
 	HelmetSlot           string `json:"helmet_slot,omitempty"`
 	BodyArmorSlot        string `json:"body_armor_slot,omitempty"`
@@ -107,6 +107,19 @@ type InventorySlot struct {
 	Quantity int    `json:"quantity,omitempty"`
 }
 
+func (c *Character) WaitForCooldown() {
+	if c.Cooldown == 0 {
+		return
+	}
+
+	fmt.Printf("On cooldown for %d seconds\n", c.Cooldown)
+
+	time.Sleep(time.Duration(c.Cooldown) * time.Second)
+	fmt.Println("cooldown ended...")
+	c.Cooldown = 0
+	return
+}
+
 func (c Character) AbleToCraft(skill string, wantLevel int) bool {
 	if skill == "" || wantLevel == 0 {
 		return true
@@ -124,4 +137,26 @@ func (c Character) AbleToCraft(skill string, wantLevel int) bool {
 		}
 	}
 	return false
+}
+
+func (c Character) IsEquipped(item CraftableItem) bool {
+	fields := reflect.TypeOf(c)
+	for i := fields.NumField() - 1; i >= 0; i-- {
+		// run loop backwards because these fields are at the bottom of the object
+		if val, ok := fields.Field(i).Tag.Lookup("type"); ok && val == item.Type {
+			fmt.Println("found item equipped to character")
+			return true
+		}
+	}
+	return false
+}
+
+func (c Character) FindItemInInventory(code string) (bool, int) {
+	for _, slot := range c.Inventory {
+		if slot.Code == code {
+			return true, slot.Quantity
+		}
+	}
+
+	return false, 0
 }
