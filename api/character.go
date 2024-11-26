@@ -4,24 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
+	"time"
 )
-
-type Service interface {
-	Fight() (*FightResponse, error)
-	FightLoop() error
-	ContinuousFightLoop() error
-	Rest() error
-
-	AcceptTask() (*AcceptTaskResponse, error)
-	CompleteTask() (*CompleteTaskResponse, error)
-
-	MoveCharacter(x, y int) (*MoveResponse, error)
-}
-
-type CharacterSvc struct {
-	Character *Character
-	Client    *ArtifactsClient
-}
 
 type ListCharactersResponse struct {
 	Characters []Character  `json:"data"`
@@ -33,36 +18,108 @@ type CharacterResponse struct {
 	Error     ErrorMessage `json:"error"`
 }
 
-func NewCharacterSvc(client *ArtifactsClient, char *Character) Service {
-	return &CharacterSvc{
-		Character: char,
-		Client:    client,
-	}
+type Character struct {
+	Name    string `json:"name"`
+	Account string `json:"account"`
+	Skin    string `json:"skin"`
+
+	Level int `json:"level"`
+	XP    int `json:"xp"`
+	MaxXP int `json:"max_xp"`
+	Gold  int `json:"gold"`
+	Speed int `json:"speed"`
+
+	Hp    int `json:"hp"`
+	MaxHP int `json:"max_hp"`
+	Haste int `json:"haste"`
+
+	X int `json:"x"` // character x coordinate
+	Y int `json:"y"` // character y coordinate
+
+	Cooldown           int       `json:"cooldown"`
+	CooldownExpiration time.Time `json:"cooldown_expiration"` // string<date-time> per docs
+
+	WeaponSlot           string `json:"weapon_slot,omitempty" type:"weapon,armor"`
+	ShieldSlot           string `json:"shield_slot,omitempty" type:"shield,armor"`
+	HelmetSlot           string `json:"helmet_slot,omitempty" type:"helmet,armor"`
+	BodyArmorSlot        string `json:"body_armor_slot,omitempty" type:"body_armor,armor"`
+	LegArmorSlot         string `json:"leg_armor_slot,omitempty" type:"leg_armor,armor"`
+	BootsSlot            string `json:"boots_slot,omitempty" type:"boots,armor"`
+	Ring1Slot            string `json:"ring1_slot,omitempty" type:"ring1,armor"`
+	Ring2Slot            string `json:"ring2_slot,omitempty" type:"ring2,armor"`
+	AmuletSlot           string `json:"amulet_slot,omitempty" type:"amulet,armor"`
+	Artifact1Slot        string `json:"artifact1_slot,omitempty" type:"artifact1,armor"`
+	Artifact2Slot        string `json:"artifact2_slot,omitempty" type:"artifact2,armor"`
+	Artifact3Slot        string `json:"artifact3_slot,omitempty" type:"artifact3,armor"`
+	Utility1Slot         string `json:"utility1_slot,omitempty" type:"utility1,armor"`
+	Utility1SlotQuantity int    `json:"utility1_slot_quantity,omitempty" type:"utility1,armor"`
+	Utility2Slot         string `json:"utility2_slot,omitempty" type:"utility2,armor"`
+	Utility2SlotQuantity int    `json:"utility2_slot_quantity,omitempty" type:"utility2,armor"`
+
+	Task         string `json:"task"`
+	TaskType     string `json:"task_type"`
+	TaskProgress int    `json:"task_progress"`
+	TaskTotal    int    `json:"task_total"`
+
+	AttackFire int `json:"attack_fire"`
+	DmgFire    int `json:"dmg_fire"`
+	ResFire    int `json:"res_fire"`
+
+	AttackEarth int `json:"attack_earth"`
+	DmgEarth    int `json:"dmg_earth"`
+	ResEarth    int `json:"res_earth"`
+
+	AttackWater int `json:"attack_water"`
+	DmgWater    int `json:"dmg_water"`
+	ResWater    int `json:"res_water"`
+
+	AttackAir int `json:"attack_air"`
+	DmgAir    int `json:"dmg_air"`
+	ResAir    int `json:"res_air"`
+
+	MiningLevel int `json:"mining_level" skill:"mining"`
+	MiningXP    int `json:"mining_xp"`
+	MiningMaxXP int `json:"mining_max_xp"`
+
+	WoodcuttingLevel int `json:"woodcutting_level" skill:"woodcutting"`
+	WoodcuttingXP    int `json:"woodcutting_xp"`
+	WoodcuttingMaxXP int `json:"woodcutting_max_xp"`
+
+	FishingLevel int `json:"fishing_level" skill:"fishing"`
+	FishingXP    int `json:"fising_xp"`
+	FishingMaxXP int `json:"fishing_max_xp"`
+
+	WeaponcraftingLevel int `json:"weaponcrafting_level" skill:"weaponcrafting"`
+	WeaponcraftingXP    int `json:"weaponcrafting_xp"`
+	WeaponcraftingMaxXP int `json:"weaponcrafting_max_xp"`
+
+	GearcraftingLevel int `json:"gearcrafting_level" skill:"gearcrafting"`
+	GearcraftingXP    int `json:"gearcrafting_xp"`
+	GearcraftingMaxXP int `json:"gearcrafting_max_xp"`
+
+	JewelrycraftingLevel int `json:"jewelrycrafting_level" skill:"jewelrycrafting"`
+	JewelrycraftingXP    int `json:"jewelrycrafting_xp"`
+	JewelrycraftingMaxXP int `json:"jewelrycrafting_max_xp"`
+
+	CookingLevel int `json:"cooking_level" skill:"cooking"`
+	CookingXP    int `json:"cooking_xp"`
+	CookingMaxXP int `json:"cooking_max_xp"`
+
+	AlchemyLevel int `json:"alchemy_level" skill:"alchemy"`
+	AlchemyXP    int `json:"alchemy_xp"`
+	AlchemyMaxXP int `json:"alchemy_max_xp"`
+
+	InventoryMaxItems int             `json:"inventory_max_items"`
+	Inventory         []InventorySlot `json:"inventory"`
 }
 
-func (c *CharacterSvc) Unequip(item CraftableItem) error {
-	fmt.Printf("Unquipping item: %s\n", item.Name)
-	unequipResp, err := c.Client.Unequip(c.Character.Name, item)
-	if err != nil {
-		return fmt.Errorf("unequipping item: %w", err)
-	}
-	c.Character = &unequipResp.Character
-	c.Character.WaitForCooldown()
-	return nil
+type InventorySlot struct {
+	Slot     int    `json:"slot,omitempty"`
+	Code     string `json:"code,omitempty"`
+	Quantity int    `json:"quantity,omitempty"`
 }
 
-func (c *CharacterSvc) Equip(item CraftableItem) error {
-	fmt.Printf("Equipping item: %s\n", item.Name)
-	equipResp, err := c.Client.Equip(c.Character.Name, item)
-	if err != nil {
-		return fmt.Errorf("equipping item: %w", err)
-	}
-	c.Character = &equipResp.Character
-	c.Character.WaitForCooldown()
-	return nil
-}
-
-func (c *CharacterSvc) MoveCharacter(x, y int) (*MoveResponse, error) {
+func (c *Svc) MoveCharacter(x, y int) (*MoveResponse, error) {
 	if c.Character.X == x && c.Character.Y == y {
 		fmt.Printf("character already at %d, %d\n", x, y)
 		return nil, nil
@@ -79,169 +136,99 @@ func (c *CharacterSvc) MoveCharacter(x, y int) (*MoveResponse, error) {
 	return moveResp, nil
 }
 
-func (c *CharacterSvc) Fight() (*FightResponse, error) {
-	percentHealth := float64(c.Character.Hp) / float64(c.Character.MaxHP) * 100.0
-	if percentHealth < 25 {
-		fmt.Printf("Character HP below 25 percent: %.2f\n", percentHealth)
-		return nil, nil
+func (c *ArtifactsClient) MoveCharacter(name string, x, y int) (*MoveResponse, error) {
+	fmt.Printf("Moving to %d, %d\n", x, y)
+	path := fmt.Sprintf("/my/%s/action/move", name)
+	reqBody := MoveRequestBody{
+		X: x,
+		Y: y,
 	}
 
-	fmt.Println("Fighting!")
-	path := fmt.Sprintf("/my/%s/action/fight", c.Character.Name)
-	respBytes, err := c.Client.Do(http.MethodPost, path, nil, nil)
+	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("executing fight request: %w", err)
+		return nil, fmt.Errorf("marshalling body: %w", err)
 	}
 
-	fightResp := FightResponse{}
-	if err := json.Unmarshal(respBytes, &fightResp); err != nil {
+	respBytes, err := c.Do(http.MethodPost, path, nil, bodyBytes)
+	if err != nil {
+		return nil, fmt.Errorf("executing move request: %w", err)
+	}
+
+	moveResp := MoveResponse{}
+	if err := json.Unmarshal(respBytes, &moveResp); err != nil {
 		return nil, fmt.Errorf("unmarshalling resp payload: %w", err)
 	}
 
-	if fightResp.Error.Code != 0 {
-		return nil, fmt.Errorf("error response received: status code: %d, error message: %s", fightResp.Error.Code, fightResp.Error.Message)
+	if moveResp.Error.Code != 0 {
+		return nil, fmt.Errorf("error response received: status code: %d, error message: %s", moveResp.Error.Code, moveResp.Error.Message)
 	}
 
-	c.Character = &fightResp.Data.Character
-	fmt.Printf("Result: %s\n", fightResp.Data.Fight.Result)
-	fmt.Printf("XP Gained: %d\n", fightResp.Data.Fight.Xp)
-	fmt.Printf("Character level: %d\n", c.Character.Level)
-	fmt.Printf("XP to level: %d\n", c.Character.MaxXP-c.Character.XP)
-	fmt.Printf("Drops received: %v\n", fightResp.Data.Fight.Drops)
-	fmt.Printf("Gold received: %v\n", fightResp.Data.Fight.Gold)
-	fmt.Printf("Character HP: %d\n", fightResp.Data.Character.Hp)
-	fmt.Printf("Cooldown: %d seconds\n", fightResp.Data.Cooldown.TotalSeconds)
-
-	c.Character.WaitForCooldown()
-
-	return &fightResp, nil
+	return &moveResp, nil
 }
 
-func (c *CharacterSvc) FightLoop() error {
-	percentHealth := float64(c.Character.Hp) / float64(c.Character.MaxHP) * 100.0
-	if percentHealth < 25 {
-		fmt.Printf("Character HP below 25 percent: %.2f, HP: %d MaxHP: %d\n", percentHealth, c.Character.Hp, c.Character.MaxHP)
-		return nil
+func (c *Character) WaitForCooldown() {
+	if c.Cooldown == 0 {
+		return
 	}
 
-	fightResp, err := c.Fight()
-	if err != nil {
-		return fmt.Errorf("executing fight request: %w", err)
-	}
+	fmt.Printf("On cooldown for %d seconds\n", c.Cooldown)
 
-	c.Character = &fightResp.Data.Character
-	fmt.Printf("Result: %s\n", fightResp.Data.Fight.Result)
-	fmt.Printf("XP Gained: %d\n", fightResp.Data.Fight.Xp)
-	fmt.Printf("Character level: %d\n", c.Character.Level)
-	fmt.Printf("XP to level: %d\n", c.Character.MaxXP-c.Character.XP)
-	fmt.Printf("Drops received: %v\n", fightResp.Data.Fight.Drops)
-	fmt.Printf("Gold received: %v\n", fightResp.Data.Fight.Gold)
-	fmt.Printf("Character HP: %d\n", fightResp.Data.Character.Hp)
-	fmt.Printf("Cooldown: %d seconds\n", fightResp.Data.Cooldown.TotalSeconds)
-
-	c.Character.WaitForCooldown()
-	if err := c.FightLoop(); err != nil {
-		return fmt.Errorf("recursive fightloop: %w", err)
-	}
-
-	return nil
+	time.Sleep(time.Duration(c.Cooldown) * time.Second)
+	fmt.Println("cooldown ended...")
+	c.Cooldown = 0
+	return
 }
 
-func (c *CharacterSvc) ContinuousFightLoop() error {
-	percentHealth := float64(c.Character.Hp) / float64(c.Character.MaxHP) * 100.0
-	if percentHealth < 25 {
-		fmt.Printf("Character HP below 25 percent: %.2f, HP: %d MaxHP: %d\n", percentHealth, c.Character.Hp, c.Character.MaxHP)
-		if err := c.Rest(); err != nil {
-			return fmt.Errorf("executing rest request: %w", err)
-		}
-		if err := c.ContinuousFightLoop(); err != nil {
-			return fmt.Errorf("recursive rest fightloop: %w", err)
+func (c Character) AbleToCraft(skill string, wantLevel int) bool {
+	if skill == "" || wantLevel == 0 {
+		return true
+	}
+	fields := reflect.TypeOf(c)
+	for i := fields.NumField() - 1; i >= 0; i-- {
+		// run loop backwards because these fields are at the bottom of the object
+		if val, ok := fields.Field(i).Tag.Lookup("skill"); ok && val == skill {
+			level := reflect.ValueOf(c).Field(i).Int()
+			if int(level) < wantLevel {
+				return false
+			}
+			fmt.Println("confirmed character has required level to craft item")
+			return true
 		}
 	}
-
-	fightResp, err := c.Fight()
-	if err != nil {
-		return fmt.Errorf("executing fight request: %w", err)
-	}
-
-	c.Character = &fightResp.Data.Character
-	if err := c.ContinuousFightLoop(); err != nil {
-		return fmt.Errorf("recursive fightloop: %w", err)
-	}
-
-	return nil
+	return false
 }
 
-func (c *CharacterSvc) Rest() error {
-	fmt.Printf("Resting\n")
-	path := fmt.Sprintf("/my/%s/action/rest", c.Character.Name)
-	respBytes, err := c.Client.Do(http.MethodPost, path, nil, nil)
-	if err != nil {
-		return fmt.Errorf("executing rest request: %w", err)
+func (c Character) IsEquipped(item CraftableItem) bool {
+	fields := reflect.TypeOf(c)
+	for i := fields.NumField() - 1; i >= 0; i-- {
+		// run loop backwards because these fields are at the bottom of the object
+		if val, ok := fields.Field(i).Tag.Lookup("type"); ok && val == item.Type {
+			fmt.Println("found item equipped to character")
+			return true
+		}
 	}
-
-	restResp := RestResponse{}
-	if err := json.Unmarshal(respBytes, &restResp); err != nil {
-		return fmt.Errorf("unmarshalling resp payload: %w", err)
-	}
-
-	if restResp.Error.Code != 0 {
-		return fmt.Errorf("error response received: status code: %d, error message: %s", restResp.Error.Code, restResp.Error.Message)
-	}
-
-	c.Character = &restResp.Rest.Character
-	c.Character.WaitForCooldown()
-
-	return nil
+	return false
 }
 
-func (c *CharacterSvc) AcceptTask() (*AcceptTaskResponse, error) {
-	fmt.Printf("Accepting task\n")
-	path := fmt.Sprintf("/my/%s/action/task/new", c.Character.Name)
-	respBytes, err := c.Client.Do(http.MethodPost, path, nil, nil)
-	if err != nil {
-		return nil, fmt.Errorf("executing accept task request: %w", err)
+func (c Character) FindItemInInventory(code string) (bool, int) {
+	for _, slot := range c.Inventory {
+		if slot.Code == code {
+			return true, slot.Quantity
+		}
 	}
 
-	acceptTaskResp := AcceptTaskResponse{}
-	if err := json.Unmarshal(respBytes, &acceptTaskResp); err != nil {
-		return nil, fmt.Errorf("unmarshalling resp payload: %w", err)
-	}
-
-	if acceptTaskResp.Error.Code != 0 {
-		return nil, fmt.Errorf("error response received: status code: %d, error message: %s", acceptTaskResp.Error.Code, acceptTaskResp.Error.Message)
-	}
-
-	c.Character = &acceptTaskResp.Data.Character
-	fmt.Printf("Task code: %s\n", acceptTaskResp.Data.Task.Code)
-	fmt.Printf("Task type: %s\n", acceptTaskResp.Data.Task.Type)
-	fmt.Printf("Task total: %d\n", acceptTaskResp.Data.Task.Total)
-	fmt.Printf("Task rewards: %s\n", acceptTaskResp.Data.Task.Rewards)
-	c.Character.WaitForCooldown()
-
-	return &acceptTaskResp, nil
+	return false, 0
 }
 
-func (c *CharacterSvc) CompleteTask() (*CompleteTaskResponse, error) {
-	fmt.Printf("Accepting task\n")
-	path := fmt.Sprintf("/my/%s/action/task/complete", c.Character.Name)
-	respBytes, err := c.Client.Do(http.MethodPost, path, nil, nil)
-	if err != nil {
-		return nil, fmt.Errorf("executing complete task request: %w", err)
+func (c Character) GetAllArmorSlots() []string {
+	fields := reflect.TypeOf(c)
+	out := []string{}
+	for i := 0; i < fields.NumField(); i++ {
+		// run loop backwards because these fields are at the bottom of the object
+		if val, ok := fields.Field(i).Tag.Lookup("type"); ok && val == "armor" {
+			fmt.Println("found item equipped to character")
+			out = append(out, reflect.ValueOf(fields.Field(i)).String())
+		}
 	}
-
-	completeTaskResponse := CompleteTaskResponse{}
-	if err := json.Unmarshal(respBytes, &completeTaskResponse); err != nil {
-		return nil, fmt.Errorf("unmarshalling resp payload: %w", err)
-	}
-
-	if completeTaskResponse.Error.Code != 0 {
-		return nil, fmt.Errorf("error response received: status code: %d, error message: %s", completeTaskResponse.Error.Code, completeTaskResponse.Error.Message)
-	}
-
-	c.Character = &completeTaskResponse.Data.Character
-	fmt.Printf("Task rewards: %v\n", completeTaskResponse.Data.Rewards)
-	c.Character.WaitForCooldown()
-
-	return &completeTaskResponse, nil
+	return out
 }

@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +11,8 @@ import (
 type Client interface {
 	Do(method, path string, params map[string]string, body []byte) ([]byte, error)
 
+	GetCharacter(name string) (*CharacterResponse, error)
+	GetCharacters() (*ListCharactersResponse, error)
 	MoveCharacter(name string) (*MoveResponse, error)
 
 	Unequip(characterName string, item CraftableItem) (*UnequipData, error)
@@ -40,37 +41,6 @@ func NewClient(authToken string) *ArtifactsClient {
 	}
 }
 
-// todo: move to character file?
-func (c *ArtifactsClient) MoveCharacter(name string, x, y int) (*MoveResponse, error) {
-	fmt.Printf("Moving to %d, %d\n", x, y)
-	path := fmt.Sprintf("/my/%s/action/move", name)
-	reqBody := MoveRequestBody{
-		X: x,
-		Y: y,
-	}
-
-	bodyBytes, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("marshalling body: %w", err)
-	}
-
-	respBytes, err := c.Do(http.MethodPost, path, nil, bodyBytes)
-	if err != nil {
-		return nil, fmt.Errorf("executing move request: %w", err)
-	}
-
-	moveResp := MoveResponse{}
-	if err := json.Unmarshal(respBytes, &moveResp); err != nil {
-		return nil, fmt.Errorf("unmarshalling resp payload: %w", err)
-	}
-
-	if moveResp.Error.Code != 0 {
-		return nil, fmt.Errorf("error response received: status code: %d, error message: %s", moveResp.Error.Code, moveResp.Error.Message)
-	}
-
-	return &moveResp, nil
-}
-
 func (c *ArtifactsClient) Do(method, path string, params map[string]string, body []byte) ([]byte, error) {
 	u, err := url.Parse(c.basePath)
 	if err != nil {
@@ -97,7 +67,7 @@ func (c *ArtifactsClient) Do(method, path string, params map[string]string, body
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode > 200 {
+	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("got error response: %d", resp.StatusCode)
 	}
 

@@ -41,6 +41,28 @@ type EquipData struct {
 	Character Character     `json:"character"`
 }
 
+func (c *Svc) Unequip(item CraftableItem) error {
+	fmt.Printf("Unquipping item: %s\n", item.Name)
+	unequipResp, err := c.Client.Unequip(c.Character.Name, item)
+	if err != nil {
+		return fmt.Errorf("unequipping item: %w", err)
+	}
+	c.Character = &unequipResp.Character
+	c.Character.WaitForCooldown()
+	return nil
+}
+
+func (c *Svc) Equip(item CraftableItem) error {
+	fmt.Printf("Equipping item: %s\n", item.Name)
+	equipResp, err := c.Client.Equip(c.Character.Name, item)
+	if err != nil {
+		return fmt.Errorf("equipping item: %w", err)
+	}
+	c.Character = &equipResp.Character
+	c.Character.WaitForCooldown()
+	return nil
+}
+
 func (c *ArtifactsClient) Unequip(characterName string, item CraftableItem) (*UnequipData, error) {
 	path := fmt.Sprintf("/my/%s/action/unequip", characterName)
 	bodyStruct := UnequipBody{

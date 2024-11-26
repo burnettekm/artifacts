@@ -10,7 +10,7 @@ import (
 func main() {
 	// process flags
 	itemPtr := flag.String("item", "", "provide item code that you wish to craft")
-	fightMonsterPtr := flag.String("monster", "", "provide the monster you wish to fight")
+	//fightMonsterPtr := flag.String("monster", "", "provide the monster you wish to fight")
 	flag.Parse()
 
 	// set up app dependencies
@@ -25,16 +25,15 @@ func main() {
 		panic(err)
 	}
 
-	if itemPtr != nil {
-		craftSvc := api.NewCraftingService(client, &char.Character)
-		if err := craftSvc.CraftItem(*itemPtr); err != nil {
-			panic(err)
-		}
+	service := api.NewSvc(client, &char.Character)
+	item, err := service.CraftItem(*itemPtr, 1)
+	if err != nil {
+		panic(err)
 	}
 
-	charSvc := api.NewCharacterSvc(client, &char.Character)
-	if fightMonsterPtr != nil {
-		charSvc.Fight()
+	// equip item
+	if err := service.Equip(*item); err != nil {
+		panic(err)
 	}
 
 	// find chicken

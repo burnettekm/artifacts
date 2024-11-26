@@ -4,33 +4,17 @@ import (
 	"fmt"
 )
 
-type CraftingService interface {
-	CraftItem(code string) error
-}
-
-type CraftingServiceImpl struct {
-	Client    *ArtifactsClient
-	Character *Character
-}
-
-func NewCraftingService(client *ArtifactsClient, character *Character) CraftingService {
-	return &CraftingServiceImpl{
-		Client:    client,
-		Character: character,
-	}
-}
-
-func (c *CraftingServiceImpl) CraftItem(code string) error {
+func (c *Svc) CraftItem(code string, quantity int) (*CraftableItem, error) {
 	fmt.Printf("Attempting to craft item %s", code)
 
 	item, err := c.Client.GetItem(code)
 	if err != nil {
-		return fmt.Errorf("getting item: %w", err)
+		return nil, fmt.Errorf("getting item: %w", err)
 	}
 
 	// verify character can craft item
 	if !c.Character.AbleToCraft(item.Craft.Skill, item.Craft.Level) {
-		return fmt.Errorf("unable to craft item: required level: %d", item.Craft.Level)
+		return nil, fmt.Errorf("unable to craft item: required level: %d", item.Craft.Level)
 	}
 
 	// get dependent items
@@ -38,7 +22,15 @@ func (c *CraftingServiceImpl) CraftItem(code string) error {
 	for _, subItem := range item.Craft.Items {
 		craftable, err := c.Client.GetItem(subItem.Code)
 		if err != nil {
-			return fmt.Errorf("getting item: %s: %w", subItem.Code, err)
+			return nil, fmt.Errorf("getting item: %s: %w", subItem.Code, err)
+		}
+
+		// check if item equipped
+		if c.Character.IsEquipped(*craftable) {
+			if err := c.unequip(*craftable); err != nil {
+				return nil, fmt.Errorf("unequipping item for crafting: %w", err)
+			}
+			continue
 		}
 
 		// check if item in inventory
@@ -47,16 +39,8 @@ func (c *CraftingServiceImpl) CraftItem(code string) error {
 			continue
 		}
 
-		// check if item equipped
-		if c.Character.IsEquipped(*craftable) {
-			if err := c.unequip(*craftable); err != nil {
-				return fmt.Errorf("unequipping item for crafting: %w", err)
-			}
-			continue
-		}
-
 		if !c.Character.AbleToCraft(craftable.Craft.Skill, craftable.Craft.Level) {
-			return fmt.Errorf("unable to craft subitem: %s: needs %s level: %d", craftable.Name, craftable.Craft.Skill, craftable.Craft.Level)
+			return nil, fmt.Errorf("unable to craft subitem: %s: needs %s level: %d", craftable.Name, craftable.Craft.Skill, craftable.Craft.Level)
 		}
 		remainingQuantity := subItem.Quantity - inventoryQuantity
 		requiredItems[craftable] = remainingQuantity
@@ -64,9 +48,17 @@ func (c *CraftingServiceImpl) CraftItem(code string) error {
 
 	// let's assume we're gathering for now
 	fmt.Printf("Gathering required items to craft %s\n", code)
-	for reqItem, quantity := range requiredItems {
-		if err := c.Gather(*reqItem, quantity); err != nil {
-			return fmt.Errorf("gathering required item: %v: %w", reqItem, err)
+	for reqItem, q := range requiredItems {
+		for i := 0; i < q; i++ {
+			if len(reqItem.Craft.Items) == 0 {
+				if err := c.Gather(*reqItem, 1); err != nil {
+					return nil, fmt.Errorf("gathering required item: %s: %w", reqItem.Code, err)
+				}
+			} else {
+				if _, err := c.CraftItem(reqItem.Code, 1); err != nil {
+					return nil, fmt.Errorf("crafting subitem %s: %w", reqItem.Code, err)
+				}
+			}
 		}
 	}
 
@@ -76,26 +68,26 @@ func (c *CraftingServiceImpl) CraftItem(code string) error {
 	contentCode := item.Craft.Skill
 	mapResp, err := c.Client.GetMaps(&contentCode, &contentType)
 	if err != nil {
-		return fmt.Errorf("getting location of workshop: %w", err)
+		return nil, fmt.Errorf("getting location of workshop: %w", err)
 	}
 
 	if _, err := c.moveCharacter(mapResp.Data[0].X, mapResp.Data[0].Y); err != nil {
-		return fmt.Errorf("moving to workshop location: %w", err)
+		return nil, fmt.Errorf("moving to workshop location: %w", err)
 	}
 
-	if err := c.craft(code, 1); err != nil {
-		return fmt.Errorf("crafting final item: %w", err)
+	if err := c.craft(code, quantity); err != nil {
+		return nil, fmt.Errorf("crafting final item: %w", err)
 	}
 
-	if err := c.equip(*item); err != nil {
-		return fmt.Errorf("equipping crafted item: %w", err)
-	}
+	//if err := c.equip(*item); err != nil {
+	//	return fmt.Errorf("equipping crafted item: %w", err)
+	//}
 
 	fmt.Println("Successfully crafted item!")
-	return nil
+	return item, nil
 }
 
-func (c *CraftingServiceImpl) craft(code string, quantity int) error {
+func (c *Svc) craft(code string, quantity int) error {
 	fmt.Printf("Crafting %s!\n", code)
 	craftingResp, err := c.Client.CraftItem(c.Character.Name, code, quantity)
 	if err != nil {
@@ -107,7 +99,7 @@ func (c *CraftingServiceImpl) craft(code string, quantity int) error {
 	return nil
 }
 
-func (c *CraftingServiceImpl) moveCharacter(x, y int) (*MoveResponse, error) {
+func (c *Svc) moveCharacter(x, y int) (*MoveResponse, error) {
 	if c.Character.X == x && c.Character.Y == y {
 		fmt.Printf("character already at %d, %d\n", x, y)
 		return nil, nil
@@ -124,7 +116,7 @@ func (c *CraftingServiceImpl) moveCharacter(x, y int) (*MoveResponse, error) {
 	return moveResp, nil
 }
 
-func (c *CraftingServiceImpl) unequip(item CraftableItem) error {
+func (c *Svc) unequip(item CraftableItem) error {
 	fmt.Printf("Unquipping item: %s\n", item.Name)
 	unequipResp, err := c.Client.Unequip(c.Character.Name, item)
 	if err != nil {
@@ -135,7 +127,7 @@ func (c *CraftingServiceImpl) unequip(item CraftableItem) error {
 	return nil
 }
 
-func (c *CraftingServiceImpl) equip(item CraftableItem) error {
+func (c *Svc) equip(item CraftableItem) error {
 	fmt.Printf("Equipping item: %s\n", item.Name)
 	equipResp, err := c.Client.Equip(c.Character.Name, item)
 	if err != nil {
@@ -146,7 +138,7 @@ func (c *CraftingServiceImpl) equip(item CraftableItem) error {
 	return nil
 }
 
-func (c *CraftingServiceImpl) Gather(item CraftableItem, quantity int) error {
+func (c *Svc) Gather(item CraftableItem, quantity int) error {
 	resourceData, err := c.Client.GetResource(item.Code)
 	if err != nil {
 		return fmt.Errorf("getting resource data: %w", err)
@@ -175,7 +167,7 @@ func (c *CraftingServiceImpl) Gather(item CraftableItem, quantity int) error {
 	return nil
 }
 
-func (c *CraftingServiceImpl) gather() error {
+func (c *Svc) gather() error {
 	gatherResp, err := c.Client.Gather(c.Character.Name)
 	if err != nil {
 		return fmt.Errorf("gathering: %w", err)
