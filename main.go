@@ -26,6 +26,15 @@ func main() {
 	}
 
 	service := api.NewSvc(client, &char.Character)
+	for _, invItem := range char.Character.Inventory {
+		if invItem.Code == "" {
+			continue
+		}
+		if err := service.DepositBank(invItem); err != nil {
+			panic(err)
+		}
+	}
+
 	item, err := service.CraftItem(*itemPtr, 1)
 	if err != nil {
 		panic(err)

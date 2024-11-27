@@ -20,6 +20,7 @@ func (c *Svc) CraftItem(code string, quantity int) (*CraftableItem, error) {
 	// get dependent items
 	requiredItems := map[*CraftableItem]int{}
 	for _, subItem := range item.Craft.Items {
+		remainingQuantity := subItem.Quantity * quantity
 		craftable, err := c.Client.GetItem(subItem.Code)
 		if err != nil {
 			return nil, fmt.Errorf("getting item: %s: %w", subItem.Code, err)
@@ -35,29 +36,40 @@ func (c *Svc) CraftItem(code string, quantity int) (*CraftableItem, error) {
 
 		// check if item in inventory
 		found, inventoryQuantity := c.Character.FindItemInInventory(subItem.Code)
-		if found && inventoryQuantity >= subItem.Quantity {
+		if found && inventoryQuantity >= remainingQuantity {
+			continue
+		}
+		remainingQuantity -= inventoryQuantity
+
+		// check for item in bank
+		// assume we're only looking for 1 item at a time
+		bankQuantity, err := c.WithdrawFromBankIfFound(subItem.Code, remainingQuantity)
+		if err != nil {
+			return nil, fmt.Errorf("withdrawing %s from bank if found: %w", subItem.Code, err)
+		}
+		remainingQuantity -= bankQuantity
+
+		if remainingQuantity <= 0 {
 			continue
 		}
 
 		if !c.Character.AbleToCraft(craftable.Craft.Skill, craftable.Craft.Level) {
 			return nil, fmt.Errorf("unable to craft subitem: %s: needs %s level: %d", craftable.Name, craftable.Craft.Skill, craftable.Craft.Level)
 		}
-		remainingQuantity := subItem.Quantity - inventoryQuantity
+
 		requiredItems[craftable] = remainingQuantity
 	}
 
 	// let's assume we're gathering for now
 	fmt.Printf("Gathering required items to craft %s\n", code)
 	for reqItem, q := range requiredItems {
-		for i := 0; i < q; i++ {
-			if len(reqItem.Craft.Items) == 0 {
-				if err := c.Gather(*reqItem, 1); err != nil {
-					return nil, fmt.Errorf("gathering required item: %s: %w", reqItem.Code, err)
-				}
-			} else {
-				if _, err := c.CraftItem(reqItem.Code, 1); err != nil {
-					return nil, fmt.Errorf("crafting subitem %s: %w", reqItem.Code, err)
-				}
+		if len(reqItem.Craft.Items) == 0 {
+			if err := c.Gather(*reqItem, q); err != nil {
+				return nil, fmt.Errorf("gathering required item: %s: %w", reqItem.Code, err)
+			}
+		} else {
+			if _, err := c.CraftItem(reqItem.Code, q); err != nil {
+				return nil, fmt.Errorf("crafting subitem %s: %w", reqItem.Code, err)
 			}
 		}
 	}

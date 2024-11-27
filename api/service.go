@@ -15,6 +15,8 @@ type Service interface {
 
 	CraftItem(code string, quantity int) (*CraftableItem, error)
 	Gather(item CraftableItem, quantity int) error
+
+	DepositBank(inventoryItem InventorySlot) error
 }
 
 type Svc struct {
