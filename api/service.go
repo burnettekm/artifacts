@@ -1,32 +1,54 @@
 package api
 
 type Service interface {
-	Fight() (*FightResponse, error)
-	ContinuousFightLoop() error
-	Rest() error
+	Fight(characterName string) (*FightResponse, error)
+	ContinuousFightLoop(characterName string) error
+	Rest(characterName string) error
 
-	AcceptTask() (*AcceptTaskResponse, error)
-	CompleteTask() (*CompleteTaskResponse, error)
+	MoveCharacter(charName string, x, y int) error
 
-	MoveCharacter(x, y int) (*MoveResponse, error)
+	AcceptTask(characterName string) (*AcceptTaskResponse, error)
+	CompleteTask(characterName string) (*CompleteTaskResponse, error)
 
-	Equip(item CraftableItem) error
-	Unequip(item CraftableItem) error
+	Equip(characterName string, item CraftableItem) error
+	Unequip(characterName string, item CraftableItem) error
 
 	CraftItem(code string, quantity int) (*CraftableItem, error)
-	Gather(item CraftableItem, quantity int) error
 
-	DepositBank(inventoryItem InventorySlot) error
+	DepositBank(characterName string, inventoryItem InventorySlot) error
+
+	LevelUpSkill(characterName, skill string, wantLevel int) error
+}
+
+var SkillList = []string{
+	"weaponcrafting",
+	"gearcrafting",
+	"jewelrycrafting",
+	"cooking",
+	"woodcutting",
+	"mining",
+	"alchemy",
 }
 
 type Svc struct {
-	Character *Character
-	Client    *ArtifactsClient
+	Characters       map[string]*Character
+	Client           *ArtifactsClient
+	ResourceChannels map[string]chan string
 }
 
-func NewSvc(client *ArtifactsClient, char *Character) Service {
+func NewSvc(client *ArtifactsClient, chars []*Character) Service {
+	characters := make(map[string]*Character)
+	for _, char := range chars {
+		characters[char.Name] = char
+	}
+	chans := make(map[string]chan string)
+	for _, skill := range SkillList {
+		chans[skill] = make(chan string)
+	}
+
 	return &Svc{
-		Character: char,
-		Client:    client,
+		Characters:       characters,
+		Client:           client,
+		ResourceChannels: chans,
 	}
 }

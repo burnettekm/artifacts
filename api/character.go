@@ -9,7 +9,7 @@ import (
 )
 
 type ListCharactersResponse struct {
-	Characters []Character  `json:"data"`
+	Characters []*Character `json:"data"`
 	Error      ErrorMessage `json:"error"`
 }
 
@@ -119,23 +119,6 @@ type InventorySlot struct {
 	Quantity int    `json:"quantity,omitempty"`
 }
 
-func (c *Svc) MoveCharacter(x, y int) (*MoveResponse, error) {
-	if c.Character.X == x && c.Character.Y == y {
-		fmt.Printf("character already at %d, %d\n", x, y)
-		return nil, nil
-	}
-
-	moveResp, err := c.Client.MoveCharacter(c.Character.Name, x, y)
-	if err != nil {
-		return nil, fmt.Errorf("moving character: %w", err)
-	}
-
-	c.Character = &moveResp.Data.Character
-	c.Character.WaitForCooldown()
-
-	return moveResp, nil
-}
-
 func (c *ArtifactsClient) MoveCharacter(name string, x, y int) (*MoveResponse, error) {
 	fmt.Printf("Moving to %d, %d\n", x, y)
 	path := fmt.Sprintf("/my/%s/action/move", name)
@@ -183,19 +166,23 @@ func (c Character) AbleToCraft(skill string, wantLevel int) bool {
 	if skill == "" || wantLevel == 0 {
 		return true
 	}
+	if c.FindSkillLevel(skill) >= wantLevel {
+		return true
+	}
+	return false
+}
+
+func (c Character) FindSkillLevel(skill string) int {
 	fields := reflect.TypeOf(c)
 	for i := fields.NumField() - 1; i >= 0; i-- {
 		// run loop backwards because these fields are at the bottom of the object
 		if val, ok := fields.Field(i).Tag.Lookup("skill"); ok && val == skill {
 			level := reflect.ValueOf(c).Field(i).Int()
-			if int(level) < wantLevel {
-				return false
-			}
-			fmt.Println("confirmed character has required level to craft item")
-			return true
+			fmt.Println("found skill level")
+			return int(level)
 		}
 	}
-	return false
+	return 100
 }
 
 func (c Character) IsEquipped(item CraftableItem) bool {

@@ -22,7 +22,7 @@ type ActionBankData struct {
 }
 
 func (c *Svc) WithdrawFromBankIfFound(itemCode string, quantity int) (int, error) {
-	fmt.Printf("Checking bank for item %s", itemCode)
+	fmt.Printf("Checking bank for item %s\n", itemCode)
 	path := "/my/bank/items"
 	params := map[string]string{
 		"item_code": itemCode,
@@ -35,6 +35,10 @@ func (c *Svc) WithdrawFromBankIfFound(itemCode string, quantity int) (int, error
 	bankResp := GetBankResponse{}
 	if err := json.Unmarshal(respBytes, &bankResp); err != nil {
 		return 0, fmt.Errorf("unmarshalling bank response: %w", err)
+	}
+
+	if len(bankResp.Data) == 0 {
+		return 0, nil
 	}
 
 	// withdraw the lesser of requested or available quantity
@@ -61,7 +65,18 @@ func (c *Svc) WithdrawFromBankIfFound(itemCode string, quantity int) (int, error
 
 func (c *Svc) WithdrawBankItem(itemCode string, quantity int) error {
 	fmt.Printf("Withdrawing %d %s\n", quantity, itemCode)
-	path := fmt.Sprintf("/my/%s/action/bank/withdraw", c.Character.Name)
+
+	contentType := "bank"
+	mapResp, err := c.Client.GetMaps(nil, &contentType)
+	if err != nil {
+		return fmt.Errorf("getting bank location: %w", err)
+	}
+
+	if err := c.MoveCharacter("Kristi", mapResp.Data[0].X, mapResp.Data[0].Y); err != nil {
+		return fmt.Errorf("moving to bank: %w", err)
+	}
+
+	path := fmt.Sprintf("/my/%s/action/bank/withdraw", "Kristi")
 
 	body := SimpleItem{
 		Code:     itemCode,
@@ -80,15 +95,15 @@ func (c *Svc) WithdrawBankItem(itemCode string, quantity int) error {
 	if err := json.Unmarshal(resp, &withdrawResp); err != nil {
 		return fmt.Errorf("unmarshalling action bank response: %w", err)
 	}
-	c.Character = &withdrawResp.Data.Character
-	c.Character.WaitForCooldown()
+	c.Characters["Kristi"] = &withdrawResp.Data.Character
+	c.Characters["Kristi"].WaitForCooldown()
 
 	fmt.Println("Withdraw complete")
 
 	return nil
 }
 
-func (c *Svc) DepositBank(inventoryItem InventorySlot) error {
+func (c *Svc) DepositBank(characterName string, inventoryItem InventorySlot) error {
 	fmt.Printf("Depositing item %s in the bank\n", inventoryItem.Code)
 
 	contentType := "bank"
@@ -97,11 +112,11 @@ func (c *Svc) DepositBank(inventoryItem InventorySlot) error {
 		return fmt.Errorf("getting bank location: %w", err)
 	}
 
-	if _, err := c.MoveCharacter(mapResp.Data[0].X, mapResp.Data[0].Y); err != nil {
+	if err := c.MoveCharacter(characterName, mapResp.Data[0].X, mapResp.Data[0].Y); err != nil {
 		return fmt.Errorf("moving to bank: %w", err)
 	}
 
-	path := fmt.Sprintf("/my/%s/action/bank/deposit", c.Character.Name)
+	path := fmt.Sprintf("/my/%s/action/bank/deposit", characterName)
 	body := SimpleItem{
 		Code:     inventoryItem.Code,
 		Quantity: inventoryItem.Quantity,
@@ -119,8 +134,8 @@ func (c *Svc) DepositBank(inventoryItem InventorySlot) error {
 		return fmt.Errorf("unmarshalling bank response: %w", err)
 	}
 	fmt.Println("Deposit complete")
-	c.Character = &bankResp.Data.Character
-	c.Character.WaitForCooldown()
+	c.Characters[characterName] = &bankResp.Data.Character
+	c.Characters[characterName].WaitForCooldown()
 
 	return nil
 }

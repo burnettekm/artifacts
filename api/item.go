@@ -4,11 +4,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 )
 
 type ItemResponse struct {
 	Item  CraftableItem `json:"data"`
 	Error ErrorMessage  `json:"error"`
+}
+
+type ListItemResponse struct {
+	Data []CraftableItem `json:"data"`
 }
 
 type CraftableItem struct {
@@ -49,6 +54,25 @@ func (c *ArtifactsClient) GetItem(code string) (*CraftableItem, error) {
 	}
 
 	return &itemResp.Item, nil
+}
+
+func (c *ArtifactsClient) GetItems(skill string, wantLevel, currLevel int) ([]CraftableItem, error) {
+	params := map[string]string{
+		"craft_skill": skill,
+		"min_level":   strconv.Itoa(currLevel),
+		"max_level":   strconv.Itoa(wantLevel),
+		"size":        strconv.Itoa(10),
+	}
+	resp, err := c.Do(http.MethodGet, fmt.Sprintf("/items"), params, nil)
+	if err != nil {
+		return nil, fmt.Errorf("executing request: %w", err)
+	}
+	itemResp := ListItemResponse{}
+	if err := json.Unmarshal(resp, &itemResp); err != nil {
+		return nil, fmt.Errorf("unmarshalling resp: %w", err)
+	}
+
+	return itemResp.Data, nil
 }
 
 func (c *ArtifactsClient) CraftItem(characterName, code string, quantity int) (*SkillData, error) {

@@ -36,15 +36,15 @@ type BlockedHits struct {
 	Total int `json:"total"`
 }
 
-func (c *Svc) Fight() (*FightResponse, error) {
-	percentHealth := float64(c.Character.Hp) / float64(c.Character.MaxHP) * 100.0
+func (c *Svc) Fight(characterName string) (*FightResponse, error) {
+	percentHealth := float64(c.Characters[characterName].Hp) / float64(c.Characters[characterName].MaxHP) * 100.0
 	if percentHealth < 25 {
 		fmt.Printf("Character HP below 25 percent: %.2f\n", percentHealth)
 		return nil, nil
 	}
 
 	fmt.Println("Fighting!")
-	path := fmt.Sprintf("/my/%s/action/fight", c.Character.Name)
+	path := fmt.Sprintf("/my/%s/action/fight", c.Characters[characterName].Name)
 	respBytes, err := c.Client.Do(http.MethodPost, path, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("executing fight request: %w", err)
@@ -59,40 +59,40 @@ func (c *Svc) Fight() (*FightResponse, error) {
 		return nil, fmt.Errorf("error response received: status code: %d, error message: %s", fightResp.Error.Code, fightResp.Error.Message)
 	}
 
-	c.Character = &fightResp.Data.Character
+	c.Characters[characterName] = &fightResp.Data.Character
 	fmt.Printf("Result: %s\n", fightResp.Data.Fight.Result)
 	fmt.Printf("XP Gained: %d\n", fightResp.Data.Fight.Xp)
-	fmt.Printf("Character level: %d\n", c.Character.Level)
-	fmt.Printf("XP to level: %d\n", c.Character.MaxXP-c.Character.XP)
+	fmt.Printf("Character level: %d\n", c.Characters[characterName].Level)
+	fmt.Printf("XP to level: %d\n", c.Characters[characterName].MaxXP-c.Characters[characterName].XP)
 	fmt.Printf("Drops received: %v\n", fightResp.Data.Fight.Drops)
 	fmt.Printf("Gold received: %v\n", fightResp.Data.Fight.Gold)
 	fmt.Printf("Character HP: %d\n", fightResp.Data.Character.Hp)
 	fmt.Printf("Cooldown: %d seconds\n", fightResp.Data.Cooldown.TotalSeconds)
 
-	c.Character.WaitForCooldown()
+	c.Characters[characterName].WaitForCooldown()
 
 	return &fightResp, nil
 }
 
-func (c *Svc) ContinuousFightLoop() error {
-	percentHealth := float64(c.Character.Hp) / float64(c.Character.MaxHP) * 100.0
+func (c *Svc) ContinuousFightLoop(characterName string) error {
+	percentHealth := float64(c.Characters[characterName].Hp) / float64(c.Characters[characterName].MaxHP) * 100.0
 	if percentHealth < 25 {
-		fmt.Printf("Character HP below 25 percent: %.2f, HP: %d MaxHP: %d\n", percentHealth, c.Character.Hp, c.Character.MaxHP)
-		if err := c.Rest(); err != nil {
+		fmt.Printf("Character HP below 25 percent: %.2f, HP: %d MaxHP: %d\n", percentHealth, c.Characters[characterName].Hp, c.Characters[characterName].MaxHP)
+		if err := c.Rest(characterName); err != nil {
 			return fmt.Errorf("executing rest request: %w", err)
 		}
-		if err := c.ContinuousFightLoop(); err != nil {
+		if err := c.ContinuousFightLoop(characterName); err != nil {
 			return fmt.Errorf("recursive rest fightloop: %w", err)
 		}
 	}
 
-	fightResp, err := c.Fight()
+	fightResp, err := c.Fight(characterName)
 	if err != nil {
 		return fmt.Errorf("executing fight request: %w", err)
 	}
 
-	c.Character = &fightResp.Data.Character
-	if err := c.ContinuousFightLoop(); err != nil {
+	c.Characters[characterName] = &fightResp.Data.Character
+	if err := c.ContinuousFightLoop(characterName); err != nil {
 		return fmt.Errorf("recursive fightloop: %w", err)
 	}
 

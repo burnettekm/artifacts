@@ -17,9 +17,9 @@ type Rest struct {
 	Character  Character `json:"character"`
 }
 
-func (c *Svc) Rest() error {
+func (c *Svc) Rest(characterName string) error {
 	fmt.Printf("Resting\n")
-	path := fmt.Sprintf("/my/%s/action/rest", c.Character.Name)
+	path := fmt.Sprintf("/my/%s/action/rest", characterName)
 	respBytes, err := c.Client.Do(http.MethodPost, path, nil, nil)
 	if err != nil {
 		return fmt.Errorf("executing rest request: %w", err)
@@ -34,8 +34,8 @@ func (c *Svc) Rest() error {
 		return fmt.Errorf("error response received: status code: %d, error message: %s", restResp.Error.Code, restResp.Error.Message)
 	}
 
-	c.Character = &restResp.Rest.Character
-	c.Character.WaitForCooldown()
+	c.Characters[characterName] = &restResp.Rest.Character
+	c.Characters[characterName].WaitForCooldown()
 
 	return nil
 }

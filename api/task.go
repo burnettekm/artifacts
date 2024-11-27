@@ -40,9 +40,9 @@ type TaskRewards struct {
 	Items []SimpleItem `json:"items"`
 }
 
-func (c *Svc) AcceptTask() (*AcceptTaskResponse, error) {
+func (c *Svc) AcceptTask(characterName string) (*AcceptTaskResponse, error) {
 	fmt.Printf("Accepting task\n")
-	path := fmt.Sprintf("/my/%s/action/task/new", c.Character.Name)
+	path := fmt.Sprintf("/my/%s/action/task/new", characterName)
 	respBytes, err := c.Client.Do(http.MethodPost, path, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("executing accept task request: %w", err)
@@ -57,19 +57,19 @@ func (c *Svc) AcceptTask() (*AcceptTaskResponse, error) {
 		return nil, fmt.Errorf("error response received: status code: %d, error message: %s", acceptTaskResp.Error.Code, acceptTaskResp.Error.Message)
 	}
 
-	c.Character = &acceptTaskResp.Data.Character
+	c.Characters[characterName] = &acceptTaskResp.Data.Character
 	fmt.Printf("Task code: %s\n", acceptTaskResp.Data.Task.Code)
 	fmt.Printf("Task type: %s\n", acceptTaskResp.Data.Task.Type)
 	fmt.Printf("Task total: %d\n", acceptTaskResp.Data.Task.Total)
 	fmt.Printf("Task rewards: %s\n", acceptTaskResp.Data.Task.Rewards)
-	c.Character.WaitForCooldown()
+	c.Characters[characterName].WaitForCooldown()
 
 	return &acceptTaskResp, nil
 }
 
-func (c *Svc) CompleteTask() (*CompleteTaskResponse, error) {
+func (c *Svc) CompleteTask(characterName string) (*CompleteTaskResponse, error) {
 	fmt.Printf("Accepting task\n")
-	path := fmt.Sprintf("/my/%s/action/task/complete", c.Character.Name)
+	path := fmt.Sprintf("/my/%s/action/task/complete", c.Characters[characterName].Name)
 	respBytes, err := c.Client.Do(http.MethodPost, path, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("executing complete task request: %w", err)
@@ -84,9 +84,9 @@ func (c *Svc) CompleteTask() (*CompleteTaskResponse, error) {
 		return nil, fmt.Errorf("error response received: status code: %d, error message: %s", completeTaskResponse.Error.Code, completeTaskResponse.Error.Message)
 	}
 
-	c.Character = &completeTaskResponse.Data.Character
+	c.Characters[characterName] = &completeTaskResponse.Data.Character
 	fmt.Printf("Task rewards: %v\n", completeTaskResponse.Data.Rewards)
-	c.Character.WaitForCooldown()
+	c.Characters[characterName].WaitForCooldown()
 
 	return &completeTaskResponse, nil
 }
