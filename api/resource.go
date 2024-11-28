@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 )
 
 type ResourceResponse struct {
@@ -31,10 +32,11 @@ type Drop struct {
 	MaxQuantity int    `json:"max_quantity"`
 }
 
-func (c *ArtifactsClient) GetResource(code string) ([]ResourceData, error) {
+func (c *ArtifactsClient) GetResources(pageNumber int) ([]ResourceData, error) {
 	path := "/resources"
 	params := map[string]string{
-		"drop": code,
+		"size": strconv.Itoa(100),
+		"page": strconv.Itoa(pageNumber),
 	}
 
 	resp, err := c.Do(http.MethodGet, path, params, nil)

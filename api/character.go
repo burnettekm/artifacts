@@ -9,7 +9,7 @@ import (
 )
 
 type ListCharactersResponse struct {
-	Characters []Character  `json:"data"`
+	Characters []*Character `json:"data"`
 	Error      ErrorMessage `json:"error"`
 }
 
@@ -119,19 +119,19 @@ type InventorySlot struct {
 	Quantity int    `json:"quantity,omitempty"`
 }
 
-func (c *Svc) MoveCharacter(x, y int) (*MoveResponse, error) {
-	if c.Character.X == x && c.Character.Y == y {
+func (c *Svc) MoveCharacter(characterName string, x, y int) (*MoveResponse, error) {
+	if c.Characters[characterName].X == x && c.Characters[characterName].Y == y {
 		fmt.Printf("character already at %d, %d\n", x, y)
 		return nil, nil
 	}
 
-	moveResp, err := c.Client.MoveCharacter(c.Character.Name, x, y)
+	moveResp, err := c.Client.MoveCharacter(characterName, x, y)
 	if err != nil {
 		return nil, fmt.Errorf("moving character: %w", err)
 	}
 
-	c.Character = &moveResp.Data.Character
-	c.Character.WaitForCooldown()
+	c.Characters[characterName] = &moveResp.Data.Character
+	c.Characters[characterName].WaitForCooldown()
 
 	return moveResp, nil
 }
@@ -231,4 +231,14 @@ func (c Character) GetAllArmorSlots() []string {
 		}
 	}
 	return out
+}
+
+func (c Character) IsInventoryFull() bool {
+	runningTotal := 0
+	maxInvWithBuffer := c.InventoryMaxItems - 5
+	for _, item := range c.Inventory {
+		runningTotal += item.Quantity
+	}
+
+	return runningTotal >= maxInvWithBuffer
 }

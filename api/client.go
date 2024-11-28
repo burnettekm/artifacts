@@ -12,19 +12,21 @@ type Client interface {
 	Do(method, path string, params map[string]string, body []byte) ([]byte, error)
 
 	GetCharacter(name string) (*CharacterResponse, error)
-	GetCharacters() (*ListCharactersResponse, error)
-	MoveCharacter(name string) (*MoveResponse, error)
+	GetCharacters() ([]*Character, error)
+	MoveCharacter(name string, x, y int) (*MoveResponse, error)
 
 	Unequip(characterName string, item CraftableItem) (*UnequipData, error)
 	Equip(characterName string, item CraftableItem) (*EquipData, error)
 
 	GetItem(code string) (*CraftableItem, error)
+	GetItems(pageNum int) ([]CraftableItem, error)
 	CraftItem(characterName, code string, quantity int) (*SkillData, error)
 
-	GetResource(code string) ([]ResourceData, error)
+	GetResources(pageNumber int) ([]ResourceData, error)
 	Gather(characterName string) (*SkillData, error)
 
-	GetMaps(contentCode, contentType *string) (*MapResponse, error)
+	GetMaps(contentCode, contentType *string) ([]Map, error)
+	GetMonsters(pageNumber int) ([]MonsterData, error)
 }
 
 type ArtifactsClient struct {
@@ -33,7 +35,7 @@ type ArtifactsClient struct {
 	httpClient *http.Client
 }
 
-func NewClient(authToken string) *ArtifactsClient {
+func NewClient(authToken string) Client {
 	return &ArtifactsClient{
 		basePath:   "https://api.artifactsmmo.com",
 		AuthToken:  authToken,
@@ -67,13 +69,13 @@ func (c *ArtifactsClient) Do(method, path string, params map[string]string, body
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("got error response: %d", resp.StatusCode)
-	}
-
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("reading body: %w", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("got error response: %d: %s", resp.StatusCode, string(respBytes))
 	}
 
 	return respBytes, nil

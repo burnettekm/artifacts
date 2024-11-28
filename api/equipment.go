@@ -41,25 +41,25 @@ type EquipData struct {
 	Character Character     `json:"character"`
 }
 
-func (c *Svc) Unequip(item CraftableItem) error {
+func (c *Svc) Unequip(characterName string, item CraftableItem) error {
 	fmt.Printf("Unquipping item: %s\n", item.Name)
-	unequipResp, err := c.Client.Unequip(c.Character.Name, item)
+	unequipResp, err := c.Client.Unequip(characterName, item)
 	if err != nil {
 		return fmt.Errorf("unequipping item: %w", err)
 	}
-	c.Character = &unequipResp.Character
-	c.Character.WaitForCooldown()
+	c.Characters[characterName] = &unequipResp.Character
+	c.Characters[characterName].WaitForCooldown()
 	return nil
 }
 
-func (c *Svc) Equip(item CraftableItem) error {
+func (c *Svc) Equip(characterName string, item CraftableItem) error {
 	fmt.Printf("Equipping item: %s\n", item.Name)
-	equipResp, err := c.Client.Equip(c.Character.Name, item)
+	equipResp, err := c.Client.Equip(characterName, item)
 	if err != nil {
 		return fmt.Errorf("equipping item: %w", err)
 	}
-	c.Character = &equipResp.Character
-	c.Character.WaitForCooldown()
+	c.Characters[characterName] = &equipResp.Character
+	c.Characters[characterName].WaitForCooldown()
 	return nil
 }
 

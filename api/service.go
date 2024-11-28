@@ -1,32 +1,195 @@
 package api
 
+import "fmt"
+
 type Service interface {
-	Fight() (*FightResponse, error)
-	ContinuousFightLoop() error
-	Rest() error
+	Fight(characterName string) (*FightResponse, error)
+	ContinuousFightLoop(characterName string) error
+	Rest(characterName string) error
 
-	AcceptTask() (*AcceptTaskResponse, error)
-	CompleteTask() (*CompleteTaskResponse, error)
+	AcceptTask(characterName string) (*AcceptTaskResponse, error)
+	CompleteTask(characterName string) (*CompleteTaskResponse, error)
 
-	MoveCharacter(x, y int) (*MoveResponse, error)
+	MoveCharacter(characterName string, x, y int) (*MoveResponse, error)
 
-	Equip(item CraftableItem) error
-	Unequip(item CraftableItem) error
+	Equip(characterName string, item CraftableItem) error
+	Unequip(characterName string, item CraftableItem) error
 
-	CraftItem(code string, quantity int) (*CraftableItem, error)
-	Gather(item CraftableItem, quantity int) error
+	CraftItem(characterName, code string, quantity int) (*CraftableItem, error)
+	Craft(characterName, code string, quantity int) error
+	Gather(characterName string, item CraftableItem, quantity int) error
+	FightForCrafting(characterName, dropCode string, quantity *int) error
 
-	DepositBank(inventoryItem InventorySlot) error
+	DepositBank(characterName string, inventoryItem InventorySlot) error
+	WithdrawBankItem(characterName, itemCode string, quantity int) error
+	WithdrawFromBankIfFound(characterName, itemCode string, quantity int) (int, error)
+
+	GetAllCharacters() map[string]*Character
+	GetCharacterByName(characterName string) *Character
+	GetCoordinatesByCode(contentCode string) []Coordinates
+	GetItem(code string) CraftableItem
+	GetMonsterByDrop(dropCode string) []MonsterData
+	GetMonsterByLevel(level int) []MonsterData
 }
 
 type Svc struct {
-	Character *Character
-	Client    *ArtifactsClient
+	Characters      map[string]*Character
+	Client          Client
+	MapsByCode      map[string][]Coordinates
+	Items           map[string]CraftableItem
+	MonstersByDrop  map[string][]MonsterData
+	MonstersByLevel map[int][]MonsterData
+	ResourcesByCode map[string]ResourceData
 }
 
-func NewSvc(client *ArtifactsClient, char *Character) Service {
-	return &Svc{
-		Character: char,
-		Client:    client,
+func NewSvc(token string) (Service, error) {
+	svc := &Svc{
+		Characters:      make(map[string]*Character),
+		Client:          NewClient(token),
+		MapsByCode:      make(map[string][]Coordinates),
+		Items:           make(map[string]CraftableItem),
+		MonstersByDrop:  make(map[string][]MonsterData),
+		MonstersByLevel: make(map[int][]MonsterData),
+		ResourcesByCode: make(map[string]ResourceData),
 	}
+
+	if err := svc.populateMaps(); err != nil {
+		return nil, fmt.Errorf("populating maps: %w", err)
+	}
+	if err := svc.populateItems(); err != nil {
+		return nil, fmt.Errorf("populating items: %w", err)
+	}
+	if err := svc.populateMonsters(); err != nil {
+		return nil, fmt.Errorf("populating monsters: %w", err)
+	}
+	if err := svc.populateResources(); err != nil {
+		return nil, fmt.Errorf("populating monsters: %w", err)
+	}
+	if err := svc.populateCharacters(); err != nil {
+		return nil, fmt.Errorf("populating monsters: %w", err)
+	}
+	return svc, nil
+}
+
+func (c *Svc) GetCharacterByName(characterName string) *Character {
+	return c.Characters[characterName]
+}
+
+func (c *Svc) GetAllCharacters() map[string]*Character {
+	return c.Characters
+}
+
+func (c *Svc) GetCoordinatesByCode(contentCode string) []Coordinates {
+	return c.MapsByCode[contentCode]
+}
+
+func (c *Svc) GetItem(code string) CraftableItem {
+	return c.Items[code]
+}
+
+func (c *Svc) GetMonsterByDrop(dropCode string) []MonsterData {
+	return c.MonstersByDrop[dropCode]
+}
+
+func (c *Svc) GetMonsterByLevel(level int) []MonsterData {
+	return c.MonstersByLevel[level]
+}
+
+func (c *Svc) GetResourceByCode(code string) ResourceData {
+	return c.ResourcesByCode[code]
+}
+
+func (c *Svc) populateCharacters() error {
+	chars, err := c.Client.GetCharacters()
+	if err != nil {
+		return fmt.Errorf("getting characters: %w", err)
+	}
+	for _, char := range chars {
+		c.Characters[char.Name] = char
+	}
+
+	return nil
+}
+
+func (c *Svc) populateMaps() error {
+	contentTypes := []string{"monster", "resource", "workshop", "bank", "grand_exchange", "tasks_master"}
+	for _, contentType := range contentTypes {
+		fmt.Printf("Populating maps type: %s\n", contentType)
+		maps, err := c.Client.GetMaps(nil, &contentType)
+		if err != nil {
+			return fmt.Errorf("getting monster maps: %w", err)
+		}
+
+		for _, m := range maps {
+			c.MapsByCode[m.Content.Code] = append(c.MapsByCode[m.Content.Code], Coordinates{
+				X: m.X,
+				Y: m.Y,
+			})
+		}
+	}
+	fmt.Println("Maps successfully populated")
+	return nil
+}
+
+func (c *Svc) populateItems() error {
+	for i := 1; i < 100; i++ {
+		fmt.Printf("Populating items page %d\n", i)
+		items, err := c.Client.GetItems(i)
+		if err != nil {
+			return fmt.Errorf("getting items page %d: %w", i, err)
+		}
+		if len(items) == 0 {
+			break
+		}
+
+		for _, item := range items {
+			c.Items[item.Code] = item
+		}
+	}
+
+	fmt.Println("Items successfully populated")
+	return nil
+}
+
+func (c *Svc) populateMonsters() error {
+	for i := 1; i < 100; i++ {
+		fmt.Printf("Populating monsters page %d\n", i)
+		monsters, err := c.Client.GetMonsters(i)
+		if err != nil {
+			return fmt.Errorf("getting monsters page %d: %w", i, err)
+		}
+		if len(monsters) == 0 {
+			break
+		}
+
+		for _, monster := range monsters {
+			c.MonstersByLevel[monster.Level] = append(c.MonstersByLevel[monster.Level], monster)
+			for _, drop := range monster.Drops {
+				c.MonstersByDrop[drop.Code] = append(c.MonstersByDrop[drop.Code], monster)
+			}
+		}
+	}
+
+	fmt.Println("Monsters successfully populated")
+	return nil
+}
+
+func (c *Svc) populateResources() error {
+	for i := 1; i < 100; i++ {
+		fmt.Printf("Populating resources page %d\n", i)
+		resources, err := c.Client.GetResources(i)
+		if err != nil {
+			return fmt.Errorf("getting items page %d: %w", i, err)
+		}
+		if len(resources) == 0 {
+			break
+		}
+
+		for _, resource := range resources {
+			c.ResourcesByCode[resource.Code] = resource
+		}
+	}
+
+	fmt.Println("Resources successfully populated")
+	return nil
 }

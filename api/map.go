@@ -23,7 +23,12 @@ type Map struct {
 	Pages   int     `json:"pages"`
 }
 
-func (c *ArtifactsClient) GetMaps(contentCode, contentType *string) (*MapResponse, error) {
+type Coordinates struct {
+	X int
+	Y int
+}
+
+func (c *ArtifactsClient) GetMaps(contentCode, contentType *string) ([]Map, error) {
 	p := map[string]string{}
 	if contentCode != nil {
 		p["content_code"] = *contentCode
@@ -39,7 +44,5 @@ func (c *ArtifactsClient) GetMaps(contentCode, contentType *string) (*MapRespons
 	if err := json.Unmarshal(respBytes, &mapResp); err != nil {
 		return nil, fmt.Errorf("unmarhsalling body: %w", err)
 	}
-	return &mapResp, nil
+	return mapResp.Data, nil
 }
-
-// query params content_code (name of thing), content_type (monster, resource, etc)

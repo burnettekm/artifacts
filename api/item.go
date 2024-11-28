@@ -4,11 +4,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 )
 
 type ItemResponse struct {
 	Item  CraftableItem `json:"data"`
 	Error ErrorMessage  `json:"error"`
+}
+
+type GetItemsResponse struct {
+	Data  []CraftableItem `json:"data"`
+	Total int             `json:"total"`
+	Page  int             `json:"page"`
+	Size  int             `json:"size"`
+	Pages int             `json:"pages"`
 }
 
 type CraftableItem struct {
@@ -19,7 +28,7 @@ type CraftableItem struct {
 	Subtype     string   `json:"subtype"`
 	Description string   `json:"description"`
 	Effects     []Effect `json:"effects"`
-	Craft       Craft    `json:"craft"`
+	Craft       *Craft   `json:"craft"`
 	Tradeable   bool     `json:"tradeable"`
 }
 
@@ -38,6 +47,7 @@ type Craft struct {
 func (c *ArtifactsClient) GetItem(code string) (*CraftableItem, error) {
 	params := map[string]string{
 		"code": code,
+		"size": strconv.Itoa(100),
 	}
 	resp, err := c.Do(http.MethodGet, fmt.Sprintf("/items/%s", code), params, nil)
 	if err != nil {
@@ -49,6 +59,22 @@ func (c *ArtifactsClient) GetItem(code string) (*CraftableItem, error) {
 	}
 
 	return &itemResp.Item, nil
+}
+
+func (c *ArtifactsClient) GetItems(pageNum int) ([]CraftableItem, error) {
+	params := map[string]string{
+		"page": strconv.Itoa(pageNum),
+	}
+	resp, err := c.Do(http.MethodGet, "/items", params, nil)
+	if err != nil {
+		return nil, fmt.Errorf("executing request: %w", err)
+	}
+	itemResp := GetItemsResponse{}
+	if err := json.Unmarshal(resp, &itemResp); err != nil {
+		return nil, fmt.Errorf("unmarshalling resp: %w", err)
+	}
+
+	return itemResp.Data, nil
 }
 
 func (c *ArtifactsClient) CraftItem(characterName, code string, quantity int) (*SkillData, error) {

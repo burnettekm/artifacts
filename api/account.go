@@ -22,7 +22,7 @@ func (c *ArtifactsClient) GetCharacter(name string) (*CharacterResponse, error) 
 	return &charResp, nil
 }
 
-func (c *ArtifactsClient) GetCharacters() (*ListCharactersResponse, error) {
+func (c *ArtifactsClient) GetCharacters() ([]*Character, error) {
 	path := "/my/characters"
 	respBytes, err := c.Do("GET", path, nil, nil)
 	if err != nil {
@@ -36,5 +36,5 @@ func (c *ArtifactsClient) GetCharacters() (*ListCharactersResponse, error) {
 	if charResp.Error.Code != 0 {
 		return nil, fmt.Errorf("error response received: status code: %d, error message: %s", charResp.Error.Code, charResp.Error.Message)
 	}
-	return &charResp, nil
+	return charResp.Characters, nil
 }
