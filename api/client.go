@@ -25,7 +25,7 @@ type Client interface {
 	GetResources(pageNumber int) ([]ResourceData, error)
 	Gather(characterName string) (*SkillData, error)
 
-	GetMaps(contentCode, contentType *string) ([]Map, error)
+	GetMaps(pageNumber int) ([]Map, error)
 	GetMonsters(pageNumber int) ([]MonsterData, error)
 }
 

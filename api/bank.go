@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 )
 
 type ActionBankResponse struct {
@@ -22,32 +23,29 @@ type ActionBankData struct {
 }
 
 func (c *Svc) WithdrawFromBankIfFound(characterName, itemCode string, quantity int) (int, error) {
-	bankQuantity, err := c.CheckBankForItem(itemCode)
-	if err != nil {
-		return 0, fmt.Errorf("checking bank for item: %w", err)
-	}
+	fmt.Printf("%s searching bank for %d %s\n", characterName, quantity, itemCode)
+	c.BankMutex.Lock()
+	defer c.BankMutex.Unlock()
 
-	if bankQuantity == 0 {
+	item, found := c.GetBankItemsByCode(itemCode)
+	if !found {
 		return 0, nil
 	}
+	foundQuantity := item.Quantity
 
 	// withdraw the lesser of requested or available quantity
 	// requested quantity 3 bank quantity 7, withdraw 3
 	// requested 3 bank quantity 2, withdraw 2
 	// check for 0 found in bank below
 	var minQuantity int
-	if quantity <= bankQuantity {
+	if quantity <= foundQuantity {
 		minQuantity = quantity
 	} else {
-		minQuantity = bankQuantity
+		minQuantity = foundQuantity
 	}
 
 	if minQuantity > c.Characters[characterName].InventoryMaxItems {
 		minQuantity = c.Characters[characterName].InventoryMaxItems
-	}
-
-	if minQuantity == 0 {
-		return 0, nil
 	}
 
 	if err := c.WithdrawBankItem(characterName, itemCode, minQuantity); err != nil {
@@ -57,27 +55,23 @@ func (c *Svc) WithdrawFromBankIfFound(characterName, itemCode string, quantity i
 	return minQuantity, nil
 }
 
-func (c *Svc) CheckBankForItem(itemCode string) (int, error) {
-	fmt.Printf("Checking bank for item %s", itemCode)
+func (c *Svc) GetBankItems() ([]SimpleItem, error) {
+	fmt.Println("Getting bank items")
 	path := "/my/bank/items"
 	params := map[string]string{
-		"item_code": itemCode,
+		"size": strconv.Itoa(100),
 	}
 
 	respBytes, err := c.Client.Do(http.MethodGet, path, params, nil)
 	if err != nil {
-		return 0, fmt.Errorf("executing deposit bank request: %w", err)
+		return nil, fmt.Errorf("executing deposit bank request: %w", err)
 	}
 	bankResp := GetBankResponse{}
 	if err := json.Unmarshal(respBytes, &bankResp); err != nil {
-		return 0, fmt.Errorf("unmarshalling bank response: %w", err)
+		return nil, fmt.Errorf("unmarshalling bank response: %w", err)
 	}
 
-	if len(bankResp.Data) == 0 {
-		return 0, nil
-	}
-
-	return bankResp.Data[0].Quantity, nil
+	return bankResp.Data, nil
 }
 
 func (c *Svc) WithdrawBankItem(characterName, itemCode string, quantity int) error {
@@ -108,6 +102,9 @@ func (c *Svc) WithdrawBankItem(characterName, itemCode string, quantity int) err
 	if err := json.Unmarshal(resp, &withdrawResp); err != nil {
 		return fmt.Errorf("unmarshalling action bank response: %w", err)
 	}
+
+	c.updateBank(withdrawResp.Data.Bank)
+
 	c.Characters[characterName] = &withdrawResp.Data.Character
 	c.Characters[characterName].WaitForCooldown()
 
@@ -117,6 +114,9 @@ func (c *Svc) WithdrawBankItem(characterName, itemCode string, quantity int) err
 }
 
 func (c *Svc) DepositBank(characterName string, inventoryItem InventorySlot) error {
+	c.BankMutex.Lock()
+	defer c.BankMutex.Unlock()
+
 	fmt.Printf("%s depositing item %s in the bank\n", characterName, inventoryItem.Code)
 	coords := c.GetCoordinatesByCode("bank")
 	if _, err := c.MoveCharacter(characterName, coords[0].X, coords[0].Y); err != nil {
@@ -140,7 +140,9 @@ func (c *Svc) DepositBank(characterName string, inventoryItem InventorySlot) err
 	if err := json.Unmarshal(respBytes, &bankResp); err != nil {
 		return fmt.Errorf("unmarshalling bank response: %w", err)
 	}
+	c.updateBank(bankResp.Data.Bank)
 	fmt.Println("Deposit complete")
+
 	c.Characters[characterName] = &bankResp.Data.Character
 	c.Characters[characterName].WaitForCooldown()
 

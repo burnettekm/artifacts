@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 )
 
 type MapResponse struct {
@@ -28,14 +29,12 @@ type Coordinates struct {
 	Y int
 }
 
-func (c *ArtifactsClient) GetMaps(contentCode, contentType *string) ([]Map, error) {
-	p := map[string]string{}
-	if contentCode != nil {
-		p["content_code"] = *contentCode
+func (c *ArtifactsClient) GetMaps(pageNumber int) ([]Map, error) {
+	p := map[string]string{
+		"size": strconv.Itoa(100),
+		"page": strconv.Itoa(pageNumber),
 	}
-	if contentType != nil {
-		p["content_type"] = *contentType
-	}
+
 	respBytes, err := c.Do(http.MethodGet, "/maps", p, nil)
 	if err != nil {
 		return nil, fmt.Errorf("executing GetMaps request: %w", err)

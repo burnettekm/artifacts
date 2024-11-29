@@ -1,6 +1,9 @@
 package api
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
 type Service interface {
 	Fight(characterName string) (*FightResponse, error)
@@ -17,9 +20,12 @@ type Service interface {
 
 	CraftItem(characterName, code string, quantity int) (*CraftableItem, error)
 	Craft(characterName, code string, quantity int) error
+	RecycleItems(characterName string) error
 	Gather(characterName string, item CraftableItem, quantity int) error
 	FightForCrafting(characterName, dropCode string, quantity *int) error
 
+	GetBankItems() ([]SimpleItem, error)
+	DepositAllItems(characterName string) error
 	DepositBank(characterName string, inventoryItem InventorySlot) error
 	WithdrawBankItem(characterName, itemCode string, quantity int) error
 	WithdrawFromBankIfFound(characterName, itemCode string, quantity int) (int, error)
@@ -40,6 +46,8 @@ type Svc struct {
 	MonstersByDrop  map[string][]MonsterData
 	MonstersByLevel map[int][]MonsterData
 	ResourcesByCode map[string]ResourceData
+	BankItemsByCode map[string]SimpleItem
+	BankMutex       sync.Mutex
 }
 
 func NewSvc(token string) (Service, error) {
@@ -51,6 +59,8 @@ func NewSvc(token string) (Service, error) {
 		MonstersByDrop:  make(map[string][]MonsterData),
 		MonstersByLevel: make(map[int][]MonsterData),
 		ResourcesByCode: make(map[string]ResourceData),
+		BankItemsByCode: make(map[string]SimpleItem),
+		BankMutex:       sync.Mutex{},
 	}
 
 	if err := svc.populateMaps(); err != nil {
@@ -63,10 +73,13 @@ func NewSvc(token string) (Service, error) {
 		return nil, fmt.Errorf("populating monsters: %w", err)
 	}
 	if err := svc.populateResources(); err != nil {
-		return nil, fmt.Errorf("populating monsters: %w", err)
+		return nil, fmt.Errorf("populating resources: %w", err)
 	}
 	if err := svc.populateCharacters(); err != nil {
-		return nil, fmt.Errorf("populating monsters: %w", err)
+		return nil, fmt.Errorf("populating characters: %w", err)
+	}
+	if err := svc.populateBank(); err != nil {
+		return nil, fmt.Errorf("populating bank: %w", err)
 	}
 	return svc, nil
 }
@@ -99,6 +112,11 @@ func (c *Svc) GetResourceByCode(code string) ResourceData {
 	return c.ResourcesByCode[code]
 }
 
+func (c *Svc) GetBankItemsByCode(code string) (SimpleItem, bool) {
+	item, ok := c.BankItemsByCode[code]
+	return item, ok
+}
+
 func (c *Svc) populateCharacters() error {
 	chars, err := c.Client.GetCharacters()
 	if err != nil {
@@ -112,12 +130,15 @@ func (c *Svc) populateCharacters() error {
 }
 
 func (c *Svc) populateMaps() error {
-	contentTypes := []string{"monster", "resource", "workshop", "bank", "grand_exchange", "tasks_master"}
-	for _, contentType := range contentTypes {
-		fmt.Printf("Populating maps type: %s\n", contentType)
-		maps, err := c.Client.GetMaps(nil, &contentType)
+	for i := 1; i < 100; i++ {
+		fmt.Printf("Populating maps page: %d\n", i)
+		maps, err := c.Client.GetMaps(i)
 		if err != nil {
 			return fmt.Errorf("getting monster maps: %w", err)
+		}
+
+		if len(maps) == 0 {
+			break
 		}
 
 		for _, m := range maps {
@@ -192,4 +213,22 @@ func (c *Svc) populateResources() error {
 
 	fmt.Println("Resources successfully populated")
 	return nil
+}
+
+func (c *Svc) populateBank() error {
+	items, err := c.GetBankItems()
+	if err != nil {
+		return fmt.Errorf("getting bank items: %w", err)
+	}
+	for _, item := range items {
+		c.BankItemsByCode[item.Code] = item
+	}
+	return nil
+}
+
+func (c *Svc) updateBank(items []SimpleItem) {
+	c.BankItemsByCode = make(map[string]SimpleItem)
+	for _, item := range items {
+		c.BankItemsByCode[item.Code] = item
+	}
 }

@@ -120,6 +120,7 @@ type InventorySlot struct {
 }
 
 func (c *Svc) MoveCharacter(characterName string, x, y int) (*MoveResponse, error) {
+	fmt.Printf("Moving %s to %d, %d\n", characterName, x, y)
 	if c.Characters[characterName].X == x && c.Characters[characterName].Y == y {
 		fmt.Printf("character already at %d, %d\n", x, y)
 		return nil, nil
@@ -137,7 +138,6 @@ func (c *Svc) MoveCharacter(characterName string, x, y int) (*MoveResponse, erro
 }
 
 func (c *ArtifactsClient) MoveCharacter(name string, x, y int) (*MoveResponse, error) {
-	fmt.Printf("Moving to %d, %d\n", x, y)
 	path := fmt.Sprintf("/my/%s/action/move", name)
 	reqBody := MoveRequestBody{
 		X: x,
@@ -171,7 +171,7 @@ func (c *Character) WaitForCooldown() {
 		return
 	}
 
-	fmt.Printf("On cooldown for %d seconds\n", c.Cooldown)
+	fmt.Printf("%s on cooldown for %d seconds\n", c.Name, c.Cooldown)
 
 	time.Sleep(time.Duration(c.Cooldown) * time.Second)
 	fmt.Println("cooldown ended...")

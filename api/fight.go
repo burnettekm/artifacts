@@ -143,23 +143,25 @@ func (c *Svc) ContinuousFightLoopForCrafting(characterName, dropCode string, wan
 	runningTotal := 0
 
 	// check bank
-	bankQuantity, err := c.CheckBankForItem(dropCode)
-	if err != nil {
-		return fmt.Errorf("checking bank for item: %w", err)
+	c.BankMutex.Lock()
+	item, found := c.GetBankItemsByCode(dropCode)
+	if found {
+		runningTotal += item.Quantity
 	}
-	runningTotal += bankQuantity
+	c.BankMutex.Unlock()
 
 	// check inventory
 	_, invQuantity := c.Characters[characterName].FindItemInInventory(dropCode)
 	runningTotal += invQuantity
 
 	if runningTotal >= wantQuantity {
+		fmt.Printf("Goal reached. Ending loop...\n")
 		return nil
 	}
 
 	percentHealth := float64(c.Characters[characterName].Hp) / float64(c.Characters[characterName].MaxHP) * 100.0
 	if percentHealth < 25 {
-		fmt.Printf("Character HP below 25 percent: %.2f, HP: %d MaxHP: %d\n", percentHealth, c.Characters[characterName].Hp, c.Characters[characterName].MaxHP)
+		fmt.Printf("%s HP below 25 percent: %.2f, HP: %d MaxHP: %d\n", characterName, percentHealth, c.Characters[characterName].Hp, c.Characters[characterName].MaxHP)
 		if err := c.Rest(characterName); err != nil {
 			return fmt.Errorf("executing rest request: %w", err)
 		}

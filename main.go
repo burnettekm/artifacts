@@ -3,16 +3,16 @@ package main
 import (
 	"artifacts/api"
 	"errors"
-	"flag"
+	"fmt"
 	"os"
 	"sync"
 )
 
 func main() {
 	// process flags
-	itemPtr := flag.String("item", "", "provide item code that you wish to craft")
+	//itemPtr := flag.String("item", "", "provide item code that you wish to craft")
 	////fightMonsterPtr := flag.String("monster", "", "provide the monster you wish to fight")
-	flag.Parse()
+	//flag.Parse()
 
 	// set up app dependencies
 	token, ok := os.LookupEnv("API_TOKEN")
@@ -45,17 +45,42 @@ func main() {
 	}
 	wg.Wait()
 
+	wg2 := sync.WaitGroup{}
 	for _, character := range service.GetAllCharacters() {
+		wg2.Add(1)
 		if character.Name == "Kristi" {
+			go func(characterName string) {
+				defer wg2.Done()
+				if err := service.FightForCrafting(characterName, "yellow_slimeball", nil); err != nil {
+					panic(err)
+				}
+			}(character.Name)
 			continue
 		}
 		go func(characterName string) {
-			if err := service.FightForCrafting(characterName, "feather", nil); err != nil {
-				panic(err)
+			defer wg2.Done()
+			for service.GetCharacterByName(characterName).GearcraftingLevel < 5 {
+				item, err := service.CraftItem(characterName, "copper_helmet", 1)
+				if err != nil {
+					fmt.Println(err)
+				}
+
+				if service.GetCharacterByName(characterName).HelmetSlot == "" {
+					if err := service.Equip(characterName, *item); err != nil {
+						panic(err)
+					}
+				} else {
+					if err := service.RecycleItems(characterName); err != nil {
+						panic(err)
+					}
+					if err := service.DepositAllItems(characterName); err != nil {
+						panic(err)
+					}
+				}
 			}
 		}(character.Name)
 	}
-
+	wg2.Wait()
 	//for service.Characters["Kristi"].WeaponcraftingLevel < 5 {
 	//	_, err := service.CraftItem("Kristi", *itemPtr, 1)
 	//	if err != nil {
@@ -66,10 +91,10 @@ func main() {
 	//	}
 	//}
 
-	_, err = service.CraftItem("Kristi", *itemPtr, 20)
-	if err != nil {
-		panic(err)
-	}
+	//_, err = service.CraftItem("Kristi", *itemPtr, 1)
+	//if err != nil {
+	//	panic(err)
+	//}
 	//
 	//// equip item
 	//if err := service.Equip("Kristi", *item); err != nil {
