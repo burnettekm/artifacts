@@ -13,17 +13,17 @@ func (c *Svc) CraftItem(characterName, code string, quantity int) (*CraftableIte
 	}
 
 	// verify character can craft item
-	if !c.Characters[characterName].AbleToCraft(item.Craft.Skill, item.Craft.Level) {
+	if !c.GetCharacterByName(characterName).AbleToCraft(item.Craft.Skill, item.Craft.Level) {
 		return nil, fmt.Errorf("unable to craft item: required level: %d", item.Craft.Level)
 	}
 
 	// get dependent items
-	requiredItems := map[*CraftableItem]int{}
 	for _, subItem := range item.Craft.Items {
 		remainingQuantity := subItem.Quantity * quantity
+		fmt.Printf("%s needs %d %s to craft %s\n", characterName, remainingQuantity, subItem.Code, code)
 		craftable := c.GetItem(subItem.Code)
 		// check if item equipped
-		if c.Characters[characterName].IsEquipped(craftable) {
+		if c.GetCharacterByName(characterName).IsEquipped(craftable) {
 			if err := c.Unequip(characterName, craftable); err != nil {
 				return nil, fmt.Errorf("unequipping item for crafting: %w", err)
 			}
@@ -31,18 +31,18 @@ func (c *Svc) CraftItem(characterName, code string, quantity int) (*CraftableIte
 		}
 
 		// check if item in inventory
-		found, inventoryQuantity := c.Characters[characterName].FindItemInInventory(subItem.Code)
+		found, inventoryQuantity := c.GetCharacterByName(characterName).FindItemInInventory(subItem.Code)
 		if found && inventoryQuantity >= remainingQuantity {
 			continue
 		}
 		remainingQuantity -= inventoryQuantity
 
 		// check for item in bank
-		// assume we're only looking for 1 item at a time
 		bankQuantity, err := c.WithdrawFromBankIfFound(characterName, subItem.Code, remainingQuantity)
 		if err != nil {
 			return nil, fmt.Errorf("withdrawing %s from bank if found: %w", subItem.Code, err)
 		}
+		c.Characters[characterName].WaitForCooldown()
 		remainingQuantity -= bankQuantity
 
 		if remainingQuantity <= 0 {
@@ -53,26 +53,21 @@ func (c *Svc) CraftItem(characterName, code string, quantity int) (*CraftableIte
 			return nil, fmt.Errorf("unable to craft subitem: %s: needs %s level: %d", craftable.Name, craftable.Craft.Skill, craftable.Craft.Level)
 		}
 
-		requiredItems[&craftable] = remainingQuantity
-	}
-
-	// let's assume we're gathering for now
-	fmt.Printf("Gathering required items to craft %s\n", code)
-	for reqItem, q := range requiredItems {
-		fmt.Printf("Gathering subitem: %s\n", reqItem.Code)
-		switch reqItem.Subtype {
+		fmt.Printf("%s gathering subitem: %s\n", characterName, craftable.Code)
+		switch craftable.Subtype {
 		case "mob":
-			if err := c.FightForCrafting(characterName, reqItem.Code, &q); err != nil {
-				return nil, fmt.Errorf("fighting for required item %s: %w", reqItem.Code, err)
+			if err := c.FightForCrafting(characterName, craftable.Code, &remainingQuantity); err != nil {
+				return nil, fmt.Errorf("%s fighting for required item %s: %w", characterName, craftable.Code, err)
 			}
 		default:
-			if reqItem.Craft != nil && len(reqItem.Craft.Items) == 0 {
-				if err := c.Gather(characterName, *reqItem, q); err != nil {
-					return nil, fmt.Errorf("gathering required item: %s: %w", reqItem.Code, err)
+			if craftable.Craft == nil {
+				fmt.Printf("%s needs to gather to craft %d %s\n", characterName, remainingQuantity, craftable.Code)
+				if err := c.Gather(characterName, craftable, remainingQuantity); err != nil {
+					return nil, fmt.Errorf("%s gathering required item: %s: %w", characterName, craftable.Code, err)
 				}
 			} else {
-				if _, err := c.CraftItem(characterName, reqItem.Code, q); err != nil {
-					return nil, fmt.Errorf("crafting subitem %s: %w", reqItem.Code, err)
+				if _, err := c.CraftItem(characterName, craftable.Code, remainingQuantity); err != nil {
+					return nil, fmt.Errorf("%s crafting subitem %s: %w", characterName, craftable.Code, err)
 				}
 			}
 		}
@@ -93,10 +88,6 @@ func (c *Svc) CraftItem(characterName, code string, quantity int) (*CraftableIte
 	if err := c.Craft(characterName, code, quantity); err != nil {
 		return nil, fmt.Errorf("crafting final item: %w", err)
 	}
-
-	//if err := c.equip(*item); err != nil {
-	//	return fmt.Errorf("equipping crafted item: %w", err)
-	//}
 
 	fmt.Println("Successfully crafted item!")
 	return &item, nil
@@ -131,6 +122,7 @@ func (c *Svc) GatherLoop(characterName, code string) error {
 		if err := c.DepositBank(characterName, inventorySlot); err != nil {
 			return fmt.Errorf("depositing %d %s: %w", 8, code, err)
 		}
+		c.Characters[characterName].WaitForCooldown()
 	}
 
 	return nil
@@ -142,7 +134,7 @@ func (c *Svc) Gather(characterName string, item CraftableItem, quantity int) err
 
 	fmt.Printf("Gathering %v\n", item)
 	// find location of item
-	coords := c.GetCoordinatesByCode(resourceData.Code)
+	coords := c.GetCoordinatesByCode(resourceData[0].Code)
 	if _, err := c.MoveCharacter(characterName, coords[0].X, coords[0].Y); err != nil {
 		return fmt.Errorf("moving to bank: %w", err)
 	}

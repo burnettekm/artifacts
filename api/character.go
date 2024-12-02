@@ -167,15 +167,15 @@ func (c *ArtifactsClient) MoveCharacter(name string, x, y int) (*MoveResponse, e
 }
 
 func (c *Character) WaitForCooldown() {
-	if c.Cooldown == 0 {
+	if c.CooldownExpiration.Before(time.Now()) {
 		return
 	}
 
-	fmt.Printf("%s on cooldown for %d seconds\n", c.Name, c.Cooldown)
+	cooldownTime := c.CooldownExpiration.Sub(time.Now())
+	fmt.Printf("%s on cooldown for %v\n", c.Name, cooldownTime)
 
-	time.Sleep(time.Duration(c.Cooldown) * time.Second)
+	time.Sleep(cooldownTime)
 	fmt.Println("cooldown ended...")
-	c.Cooldown = 0
 	return
 }
 

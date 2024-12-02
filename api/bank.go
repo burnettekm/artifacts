@@ -24,8 +24,8 @@ type ActionBankData struct {
 
 func (c *Svc) WithdrawFromBankIfFound(characterName, itemCode string, quantity int) (int, error) {
 	fmt.Printf("%s searching bank for %d %s\n", characterName, quantity, itemCode)
-	c.BankMutex.Lock()
-	defer c.BankMutex.Unlock()
+	c.takeBankLock(characterName)
+	defer c.releaseBankLock(characterName)
 
 	item, found := c.GetBankItemsByCode(itemCode)
 	if !found {
@@ -53,25 +53,6 @@ func (c *Svc) WithdrawFromBankIfFound(characterName, itemCode string, quantity i
 	}
 
 	return minQuantity, nil
-}
-
-func (c *Svc) GetBankItems() ([]SimpleItem, error) {
-	fmt.Println("Getting bank items")
-	path := "/my/bank/items"
-	params := map[string]string{
-		"size": strconv.Itoa(100),
-	}
-
-	respBytes, err := c.Client.Do(http.MethodGet, path, params, nil)
-	if err != nil {
-		return nil, fmt.Errorf("executing deposit bank request: %w", err)
-	}
-	bankResp := GetBankResponse{}
-	if err := json.Unmarshal(respBytes, &bankResp); err != nil {
-		return nil, fmt.Errorf("unmarshalling bank response: %w", err)
-	}
-
-	return bankResp.Data, nil
 }
 
 func (c *Svc) WithdrawBankItem(characterName, itemCode string, quantity int) error {
@@ -106,7 +87,7 @@ func (c *Svc) WithdrawBankItem(characterName, itemCode string, quantity int) err
 	c.updateBank(withdrawResp.Data.Bank)
 
 	c.Characters[characterName] = &withdrawResp.Data.Character
-	c.Characters[characterName].WaitForCooldown()
+	//c.GetCharacterByName(characterName).WaitForCooldown()
 
 	fmt.Println("Withdraw complete")
 
@@ -114,9 +95,6 @@ func (c *Svc) WithdrawBankItem(characterName, itemCode string, quantity int) err
 }
 
 func (c *Svc) DepositBank(characterName string, inventoryItem InventorySlot) error {
-	c.BankMutex.Lock()
-	defer c.BankMutex.Unlock()
-
 	fmt.Printf("%s depositing item %s in the bank\n", characterName, inventoryItem.Code)
 	coords := c.GetCoordinatesByCode("bank")
 	if _, err := c.MoveCharacter(characterName, coords[0].X, coords[0].Y); err != nil {
@@ -140,11 +118,14 @@ func (c *Svc) DepositBank(characterName string, inventoryItem InventorySlot) err
 	if err := json.Unmarshal(respBytes, &bankResp); err != nil {
 		return fmt.Errorf("unmarshalling bank response: %w", err)
 	}
+
+	c.takeBankLock(characterName)
+	defer c.releaseBankLock(characterName)
 	c.updateBank(bankResp.Data.Bank)
 	fmt.Println("Deposit complete")
 
 	c.Characters[characterName] = &bankResp.Data.Character
-	c.Characters[characterName].WaitForCooldown()
+	//c.Characters[characterName].WaitForCooldown()
 
 	return nil
 }
@@ -157,7 +138,27 @@ func (c *Svc) DepositAllItems(characterName string) error {
 		if err := c.DepositBank(characterName, item); err != nil {
 			return fmt.Errorf("depositing item %s: %w", item.Code, err)
 		}
+		c.Characters[characterName].WaitForCooldown()
 	}
 
 	return nil
+}
+
+func (c *Svc) GetBankItems() ([]SimpleItem, error) {
+	fmt.Println("Getting bank items")
+	path := "/my/bank/items"
+	params := map[string]string{
+		"size": strconv.Itoa(100),
+	}
+
+	respBytes, err := c.Client.Do(http.MethodGet, path, params, nil)
+	if err != nil {
+		return nil, fmt.Errorf("executing deposit bank request: %w", err)
+	}
+	bankResp := GetBankResponse{}
+	if err := json.Unmarshal(respBytes, &bankResp); err != nil {
+		return nil, fmt.Errorf("unmarshalling bank response: %w", err)
+	}
+
+	return bankResp.Data, nil
 }

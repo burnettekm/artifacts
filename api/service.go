@@ -22,6 +22,7 @@ type Service interface {
 	Craft(characterName, code string, quantity int) error
 	RecycleItems(characterName string) error
 	Gather(characterName string, item CraftableItem, quantity int) error
+	GatherLoop(characterName, code string) error
 	FightForCrafting(characterName, dropCode string, quantity *int) error
 
 	GetBankItems() ([]SimpleItem, error)
@@ -39,28 +40,31 @@ type Service interface {
 }
 
 type Svc struct {
-	Characters      map[string]*Character
-	Client          Client
-	MapsByCode      map[string][]Coordinates
-	Items           map[string]CraftableItem
-	MonstersByDrop  map[string][]MonsterData
-	MonstersByLevel map[int][]MonsterData
-	ResourcesByCode map[string]ResourceData
+	Characters          map[string]*Character
+	Client              Client
+	MapsByCode          map[string][]Coordinates
+	Items               map[string]CraftableItem
+	MonstersByDrop      map[string][]MonsterData
+	MonstersByLevel     map[int][]MonsterData
+	ResourcesByDropCode map[string][]ResourceData
+	Bank                Bank
+}
+
+type Bank struct {
+	mu              sync.Mutex
 	BankItemsByCode map[string]SimpleItem
-	BankMutex       sync.Mutex
 }
 
 func NewSvc(token string) (Service, error) {
 	svc := &Svc{
-		Characters:      make(map[string]*Character),
-		Client:          NewClient(token),
-		MapsByCode:      make(map[string][]Coordinates),
-		Items:           make(map[string]CraftableItem),
-		MonstersByDrop:  make(map[string][]MonsterData),
-		MonstersByLevel: make(map[int][]MonsterData),
-		ResourcesByCode: make(map[string]ResourceData),
-		BankItemsByCode: make(map[string]SimpleItem),
-		BankMutex:       sync.Mutex{},
+		Characters:          make(map[string]*Character),
+		Client:              NewClient(token),
+		MapsByCode:          make(map[string][]Coordinates),
+		Items:               make(map[string]CraftableItem),
+		MonstersByDrop:      make(map[string][]MonsterData),
+		MonstersByLevel:     make(map[int][]MonsterData),
+		ResourcesByDropCode: make(map[string][]ResourceData),
+		Bank:                NewBank(),
 	}
 
 	if err := svc.populateMaps(); err != nil {
@@ -82,6 +86,13 @@ func NewSvc(token string) (Service, error) {
 		return nil, fmt.Errorf("populating bank: %w", err)
 	}
 	return svc, nil
+}
+
+func NewBank() Bank {
+	return Bank{
+		mu:              sync.Mutex{},
+		BankItemsByCode: make(map[string]SimpleItem),
+	}
 }
 
 func (c *Svc) GetCharacterByName(characterName string) *Character {
@@ -108,12 +119,12 @@ func (c *Svc) GetMonsterByLevel(level int) []MonsterData {
 	return c.MonstersByLevel[level]
 }
 
-func (c *Svc) GetResourceByCode(code string) ResourceData {
-	return c.ResourcesByCode[code]
+func (c *Svc) GetResourceByCode(dropCode string) []ResourceData {
+	return c.ResourcesByDropCode[dropCode]
 }
 
 func (c *Svc) GetBankItemsByCode(code string) (SimpleItem, bool) {
-	item, ok := c.BankItemsByCode[code]
+	item, ok := c.Bank.BankItemsByCode[code]
 	return item, ok
 }
 
@@ -207,7 +218,9 @@ func (c *Svc) populateResources() error {
 		}
 
 		for _, resource := range resources {
-			c.ResourcesByCode[resource.Code] = resource
+			for _, drop := range resource.Drops {
+				c.ResourcesByDropCode[drop.Code] = append(c.ResourcesByDropCode[drop.Code], resource)
+			}
 		}
 	}
 
@@ -221,14 +234,26 @@ func (c *Svc) populateBank() error {
 		return fmt.Errorf("getting bank items: %w", err)
 	}
 	for _, item := range items {
-		c.BankItemsByCode[item.Code] = item
+		c.Bank.BankItemsByCode[item.Code] = item
 	}
+	fmt.Println("Bank successfully populated")
 	return nil
 }
 
 func (c *Svc) updateBank(items []SimpleItem) {
-	c.BankItemsByCode = make(map[string]SimpleItem)
+	c.Bank.BankItemsByCode = make(map[string]SimpleItem)
 	for _, item := range items {
-		c.BankItemsByCode[item.Code] = item
+		c.Bank.BankItemsByCode[item.Code] = item
 	}
+}
+
+func (c *Svc) takeBankLock(characterName string) {
+	fmt.Printf("%s waiting for bank lock\n", characterName)
+	c.Bank.mu.Lock()
+	fmt.Printf("%s got bank lock\n", characterName)
+}
+
+func (c *Svc) releaseBankLock(characterName string) {
+	c.Bank.mu.Unlock()
+	fmt.Printf("%s released lock on bank\n", characterName)
 }

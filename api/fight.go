@@ -76,6 +76,7 @@ func (c *Svc) Fight(characterName string) (*FightResponse, error) {
 
 func (c *Svc) ContinuousFightLoop(characterName string) error {
 	percentHealth := float64(c.Characters[characterName].Hp) / float64(c.Characters[characterName].MaxHP) * 100.0
+	coords := Coordinates{c.GetCharacterByName(characterName).X, c.GetCharacterByName(characterName).Y}
 	if percentHealth < 25 {
 		fmt.Printf("Character HP below 25 percent: %.2f, HP: %d MaxHP: %d\n", percentHealth, c.Characters[characterName].Hp, c.Characters[characterName].MaxHP)
 		if err := c.Rest(characterName); err != nil {
@@ -91,6 +92,12 @@ func (c *Svc) ContinuousFightLoop(characterName string) error {
 		return fmt.Errorf("executing fight request: %w", err)
 	}
 
+	if fightResp.Data.Fight.Result == "loss" {
+		if _, err := c.MoveCharacter(characterName, coords.X, coords.Y); err != nil {
+			return fmt.Errorf("moving to bank: %w", err)
+		}
+	}
+
 	c.Characters[characterName] = &fightResp.Data.Character
 	if err := c.ContinuousFightLoop(characterName); err != nil {
 		return fmt.Errorf("recursive fightloop: %w", err)
@@ -100,16 +107,16 @@ func (c *Svc) ContinuousFightLoop(characterName string) error {
 }
 
 func (c *Svc) FightForCrafting(characterName, dropCode string, quantity *int) error {
-	maxLevel := c.Characters[characterName].Level
+	//maxLevel := c.Characters[characterName].Level
 	monsters := c.GetMonsterByDrop(dropCode)
 
 	// find monster with highest drop rate
 	bestMonsterCode := ""
 	maxDropRate := 0
 	for _, monster := range monsters {
-		if monster.Level > maxLevel {
-			continue
-		}
+		//if monster.Level > maxLevel {
+		//	continue
+		//}
 		for _, drop := range monster.Drops {
 			if drop.Code != dropCode {
 				continue
@@ -139,16 +146,18 @@ func (c *Svc) FightForCrafting(characterName, dropCode string, quantity *int) er
 }
 
 func (c *Svc) ContinuousFightLoopForCrafting(characterName, dropCode string, wantQuantity int) error {
+	// note coordinates to prepare for loss
+	coords := Coordinates{c.GetCharacterByName(characterName).X, c.GetCharacterByName(characterName).Y}
 	// if we have the quantity we want, stop
 	runningTotal := 0
 
 	// check bank
-	c.BankMutex.Lock()
+	c.Bank.mu.Lock()
 	item, found := c.GetBankItemsByCode(dropCode)
 	if found {
 		runningTotal += item.Quantity
 	}
-	c.BankMutex.Unlock()
+	c.Bank.mu.Unlock()
 
 	// check inventory
 	_, invQuantity := c.Characters[characterName].FindItemInInventory(dropCode)
@@ -175,6 +184,13 @@ func (c *Svc) ContinuousFightLoopForCrafting(characterName, dropCode string, wan
 		return fmt.Errorf("executing fight request: %w", err)
 	}
 	c.Characters[characterName] = &fightResp.Data.Character
+
+	if fightResp.Data.Fight.Result == "loss" {
+		fmt.Println("Character lost, moving back to monster spawn")
+		if _, err := c.MoveCharacter(characterName, coords.X, coords.Y); err != nil {
+			return fmt.Errorf("moving to bank: %w", err)
+		}
+	}
 
 	if c.Characters[characterName].IsInventoryFull() {
 		if err := c.DepositAllItems(characterName); err != nil {
