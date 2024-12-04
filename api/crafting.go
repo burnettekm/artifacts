@@ -56,7 +56,8 @@ func (c *Svc) CraftItem(characterName, code string, quantity int) (*CraftableIte
 		fmt.Printf("%s gathering subitem: %s\n", characterName, craftable.Code)
 		switch craftable.Subtype {
 		case "mob":
-			if err := c.FightForCrafting(characterName, craftable.Code, &remainingQuantity); err != nil {
+			fightQty := subItem.Quantity * quantity
+			if err := c.FightForCrafting(characterName, craftable.Code, &fightQty); err != nil {
 				return nil, fmt.Errorf("%s fighting for required item %s: %w", characterName, craftable.Code, err)
 			}
 		default:
@@ -90,6 +91,7 @@ func (c *Svc) CraftItem(characterName, code string, quantity int) (*CraftableIte
 	}
 
 	fmt.Println("Successfully crafted item!")
+
 	return &item, nil
 }
 
@@ -105,25 +107,40 @@ func (c *Svc) Craft(characterName, code string, quantity int) error {
 	return nil
 }
 
-func (c *Svc) GatherLoop(characterName, code string) error {
+func (c *Svc) GatherLoop(characterName, code string, quantity int) error {
 	fmt.Printf("%s gathering %s\n", characterName, code)
 	item := c.GetItem(code)
-	for i := 0; i < 1000; i++ {
-		fmt.Printf("gather loop %d\n", i)
-		if err := c.Gather(characterName, item, 8); err != nil { // 8 resources = 1 useful item
-			return fmt.Errorf("gathering %s: %w", code, err)
-		}
 
-		_, quantity := c.Characters[characterName].FindItemInInventory(code)
-		inventorySlot := InventorySlot{
-			Code:     code,
-			Quantity: quantity,
-		}
-		if err := c.DepositBank(characterName, inventorySlot); err != nil {
-			return fmt.Errorf("depositing %d %s: %w", 8, code, err)
-		}
-		c.Characters[characterName].WaitForCooldown()
+	if err := c.Gather(characterName, item, quantity); err != nil { // 8 resources = 1 useful item
+		return fmt.Errorf("gathering %s: %w", code, err)
 	}
+
+	_, q := c.Characters[characterName].FindItemInInventory(code)
+	inventorySlot := InventorySlot{
+		Code:     code,
+		Quantity: q,
+	}
+	if err := c.DepositBank(characterName, inventorySlot); err != nil {
+		return fmt.Errorf("depositing %d %s: %w", 8, code, err)
+	}
+	c.Characters[characterName].WaitForCooldown()
+
+	//for i := 0; i < quantity; i++ {
+	//	fmt.Printf("gather loop %d\n", i)
+	//	if err := c.Gather(characterName, item, 8); err != nil { // 8 resources = 1 useful item
+	//		return fmt.Errorf("gathering %s: %w", code, err)
+	//	}
+	//
+	//	_, q := c.Characters[characterName].FindItemInInventory(code)
+	//	inventorySlot := InventorySlot{
+	//		Code:     code,
+	//		Quantity: q,
+	//	}
+	//	if err := c.DepositBank(characterName, inventorySlot); err != nil {
+	//		return fmt.Errorf("depositing %d %s: %w", 8, code, err)
+	//	}
+	//	c.Characters[characterName].WaitForCooldown()
+	//}
 
 	return nil
 }
@@ -140,6 +157,17 @@ func (c *Svc) Gather(characterName string, item CraftableItem, quantity int) err
 	}
 
 	for i := 0; i < quantity; i++ {
+		if c.GetCharacterByName(characterName).IsInventoryFull() {
+			if err := c.DepositAllItems(characterName); err != nil {
+				return fmt.Errorf("depositing inventory: %w", err)
+			}
+
+			// find location of item
+			if _, err := c.MoveCharacter(characterName, coords[0].X, coords[0].Y); err != nil {
+				return fmt.Errorf("moving to bank: %w", err)
+			}
+		}
+
 		// gather item
 		if err := c.gather(characterName); err != nil {
 			return fmt.Errorf("attempting to gather %s #%d: %w", item.Name, i, err)

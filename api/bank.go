@@ -84,8 +84,7 @@ func (c *Svc) WithdrawBankItem(characterName, itemCode string, quantity int) err
 		return fmt.Errorf("unmarshalling action bank response: %w", err)
 	}
 
-	c.updateBank(withdrawResp.Data.Bank)
-
+	c.updateBank(itemCode, quantity*-1)
 	c.Characters[characterName] = &withdrawResp.Data.Character
 	//c.GetCharacterByName(characterName).WaitForCooldown()
 
@@ -121,7 +120,7 @@ func (c *Svc) DepositBank(characterName string, inventoryItem InventorySlot) err
 
 	c.takeBankLock(characterName)
 	defer c.releaseBankLock(characterName)
-	c.updateBank(bankResp.Data.Bank)
+	c.updateBank(inventoryItem.Code, inventoryItem.Quantity)
 	fmt.Println("Deposit complete")
 
 	c.Characters[characterName] = &bankResp.Data.Character
@@ -131,12 +130,12 @@ func (c *Svc) DepositBank(characterName string, inventoryItem InventorySlot) err
 }
 
 func (c *Svc) DepositAllItems(characterName string) error {
-	for _, item := range c.Characters[characterName].Inventory {
-		if item.Code == "" {
-			continue
+	for _, inventorySlot := range c.Characters[characterName].Inventory {
+		if inventorySlot.Code == "" {
+			break
 		}
-		if err := c.DepositBank(characterName, item); err != nil {
-			return fmt.Errorf("depositing item %s: %w", item.Code, err)
+		if err := c.DepositBank(characterName, inventorySlot); err != nil {
+			return fmt.Errorf("depositing inventorySlot %s: %w", inventorySlot.Code, err)
 		}
 		c.Characters[characterName].WaitForCooldown()
 	}

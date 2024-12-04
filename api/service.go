@@ -22,10 +22,12 @@ type Service interface {
 	Craft(characterName, code string, quantity int) error
 	RecycleItems(characterName string) error
 	Gather(characterName string, item CraftableItem, quantity int) error
-	GatherLoop(characterName, code string) error
+	//GatherLoop(characterName, code string) error
+	GatherLoop(characterName, code string, quantity int) error
 	FightForCrafting(characterName, dropCode string, quantity *int) error
 
 	GetBankItems() ([]SimpleItem, error)
+	GetBankItemsByCode(code string) (SimpleItem, bool)
 	DepositAllItems(characterName string) error
 	DepositBank(characterName string, inventoryItem InventorySlot) error
 	WithdrawBankItem(characterName, itemCode string, quantity int) error
@@ -240,11 +242,10 @@ func (c *Svc) populateBank() error {
 	return nil
 }
 
-func (c *Svc) updateBank(items []SimpleItem) {
-	c.Bank.BankItemsByCode = make(map[string]SimpleItem)
-	for _, item := range items {
-		c.Bank.BankItemsByCode[item.Code] = item
-	}
+func (c *Svc) updateBank(itemCode string, quantity int) {
+	prev := c.Bank.BankItemsByCode[itemCode]
+	prev.Quantity += quantity
+	c.Bank.BankItemsByCode[itemCode] = prev
 }
 
 func (c *Svc) takeBankLock(characterName string) {

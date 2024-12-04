@@ -25,7 +25,7 @@ func (c *Svc) RecycleItems(characterName string) error {
 	inventory := c.Characters[characterName].Inventory
 	for _, item := range inventory {
 		if item.Code == "" {
-			continue
+			break
 		}
 
 		i := c.GetItem(item.Code)
